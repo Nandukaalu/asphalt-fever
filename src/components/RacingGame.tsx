@@ -398,13 +398,16 @@ export default function RacingGame() {
 
     // AI cars (other drivers)
     type AI = { car: ReturnType<typeof buildCar>; t: number; speed: number };
-    const ais: AI[] = [];
+    const MAX_SPEED_PREVIEW = 78;
+    const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
+    const ais: (AI & { driver: Driver; offset: number })[] = [];
     const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
     otherDrivers.forEach((d, i) => {
       const c = buildCar(d);
       scene.add(c.group);
-      const tStart = -0.005 - i * 0.008; // slightly behind player
-      ais.push({ car: c, t: (tStart + 1) % 1, speed: 35 + Math.random() * 8 });
+      const tStart = -0.004 - i * 0.005; // staggered grid behind player
+      const lateral = (i % 2 === 0 ? 1 : -1) * (2 + (i % 4)); // weave across track
+      ais.push({ car: c, t: (tStart + 1) % 1, speed: AI_SPEED, driver: d, offset: lateral });
     });
 
     // ---------- Input ----------
