@@ -563,21 +563,43 @@ export default function RacingGame() {
       raceProgress = (lap - 1) + ct2.t;
 
       // ---------- AI ----------
+      const cLen = curveLength(curve);
       ais.forEach((ai) => {
-        const targetSpeed = ai.speed;
-        ai.t += (targetSpeed * dt) / curveLength(curve);
+        ai.t += (ai.speed * dt) / cLen;
         if (ai.t >= 1) ai.t -= 1;
         const ap = curve.getPointAt(ai.t);
         const atan = curve.getTangentAt(ai.t).normalize();
-        ai.car.group.position.set(ap.x, 0, ap.z);
+        const an = new THREE.Vector3(-atan.z, 0, atan.x);
+        const px = ap.x + an.x * ai.offset;
+        const pz = ap.z + an.z * ai.offset;
+        ai.car.group.position.set(px, 0, pz);
         ai.car.group.rotation.y = Math.atan2(atan.x, atan.z);
-        ai.car.wheels.forEach((w) => (w.rotation.x += (targetSpeed * dt) / 0.36));
+        ai.car.wheels.forEach((w) => (w.rotation.x += (ai.speed * dt) / 0.36));
+
+        // Hitbox vs player car
+        const ddx = carPos.x - px;
+        const ddz = carPos.z - pz;
+        const distSq = ddx * ddx + ddz * ddz;
+        if (distSq < 2.5 * 2.5) {
+          const len = Math.sqrt(distSq) || 1;
+          const nx = ddx / len, nz = ddz / len;
+          const overlap = 2.5 - len;
+          carPos.x += nx * overlap;
+          carPos.z += nz * overlap;
+          speed *= 0.78;
+          lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
+          ai.speed = AI_SPEED * 0.85;
+        } else {
+          ai.speed += (AI_SPEED - ai.speed) * Math.min(1, dt * 0.5);
+        }
       });
 
-      // Position calc
+      // Position calc — sort all cars by total progress
       let position = 1;
+      const playerLapFrac = raceProgress % 1;
       ais.forEach((ai) => {
-        const aiProg = Math.floor(raceProgress) + ai.t; // approx same lap
+        const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+        const aiProg = aiLapEst + ai.t;
         if (aiProg > raceProgress) position++;
       });
 
