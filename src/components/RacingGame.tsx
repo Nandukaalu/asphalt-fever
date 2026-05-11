@@ -12,6 +12,7 @@ export default function RacingGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, lapTime: 0, bestLap: 0 });
   const [started, setStarted] = useState(false);
+  const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
   useEffect(() => {
     if (!started) return;
@@ -398,14 +399,16 @@ export default function RacingGame() {
       last = now;
 
       // Input
-      const accel = keys["w"] || keys["arrowup"];
-      const brake = keys["s"] || keys["arrowdown"];
-      const left = keys["a"] || keys["arrowleft"];
-      const right = keys["d"] || keys["arrowright"];
-      const handbrake = keys[" "];
+      const t = touchRef.current;
+      const accel = keys["w"] || keys["arrowup"] || t.accel;
+      const brake = keys["s"] || keys["arrowdown"] || t.brake;
+      const leftKey = keys["a"] || keys["arrowleft"];
+      const rightKey = keys["d"] || keys["arrowright"];
+      const handbrake = keys[" "] || t.handbrake;
 
       // Steering smoothing (less responsive at high speed for stability)
-      const steerInput = (left ? 1 : 0) - (right ? 1 : 0);
+      const keySteer = (leftKey ? 1 : 0) - (rightKey ? 1 : 0);
+      const steerInput = keySteer !== 0 ? keySteer : -t.steer;
       steering += (steerInput - steering) * Math.min(1, dt * 6);
 
       // Speed
@@ -501,30 +504,25 @@ export default function RacingGame() {
   }, [started]);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black">
+    <div className="relative w-full overflow-hidden bg-black touch-none" style={{ height: "100dvh" }}>
       <div ref={mountRef} className="absolute inset-0" />
 
       {!started && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/80 to-black/95 text-white z-10">
-          <h1 className="text-6xl font-black tracking-tight mb-2" style={{ fontFamily: "Inter, sans-serif" }}>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/80 to-black/95 text-white z-10 px-6">
+          <h1 className="text-4xl sm:text-6xl font-black tracking-tight mb-2 text-center" style={{ fontFamily: "Inter, sans-serif" }}>
             APEX <span className="text-red-600">GP</span>
           </h1>
-          <p className="text-sm uppercase tracking-[0.4em] text-white/60 mb-10">Formula Racing • Cockpit Edition</p>
+          <p className="text-[10px] sm:text-sm uppercase tracking-[0.3em] sm:tracking-[0.4em] text-white/60 mb-8 text-center">Formula Racing • Cockpit Edition</p>
 
-          <div className="grid grid-cols-2 gap-x-10 gap-y-2 text-sm mb-10">
-            <div className="text-white/60 text-right">Accelerate</div>
-            <div className="font-mono">W / ↑</div>
-            <div className="text-white/60 text-right">Brake / Reverse</div>
-            <div className="font-mono">S / ↓</div>
-            <div className="text-white/60 text-right">Steer</div>
-            <div className="font-mono">A D / ← →</div>
-            <div className="text-white/60 text-right">Handbrake</div>
-            <div className="font-mono">SPACE</div>
+          <div className="text-xs sm:text-sm text-white/70 mb-8 text-center max-w-xs leading-relaxed">
+            Hold <span className="font-mono text-red-400">Throttle</span> to accelerate, <span className="font-mono text-red-400">Brake</span> to slow.
+            Drag the <span className="font-mono text-red-400">Steer</span> pad left/right to turn.
+            <div className="mt-2 text-white/40">Desktop: W/S to drive, A/D to steer, Space handbrake.</div>
           </div>
 
           <button
             onClick={() => setStarted(true)}
-            className="px-12 py-4 bg-red-600 hover:bg-red-500 transition text-white font-bold tracking-widest uppercase text-lg shadow-[0_0_40px_rgba(220,0,0,0.5)]"
+            className="px-10 sm:px-12 py-4 bg-red-600 hover:bg-red-500 transition text-white font-bold tracking-widest uppercase text-base sm:text-lg shadow-[0_0_40px_rgba(220,0,0,0.5)]"
           >
             Start Race
           </button>
@@ -534,31 +532,92 @@ export default function RacingGame() {
       {started && (
         <>
           {/* HUD */}
-          <div className="absolute bottom-6 left-6 text-white font-mono z-10 select-none">
+          <div className="absolute bottom-6 left-6 text-white font-mono z-10 select-none pointer-events-none">
             <div className="flex items-end gap-1">
-              <span className="text-7xl font-black leading-none tabular-nums">{hud.speed}</span>
-              <span className="text-sm text-white/60 mb-2">KM/H</span>
+              <span className="text-5xl sm:text-7xl font-black leading-none tabular-nums">{hud.speed}</span>
+              <span className="text-xs sm:text-sm text-white/60 mb-1 sm:mb-2">KM/H</span>
             </div>
             <div className="mt-1 text-xs uppercase tracking-widest text-white/50">
               Gear <span className="text-red-500 text-base font-bold">{hud.gear}</span>
             </div>
           </div>
 
-          <div className="absolute top-6 left-6 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-4 py-2 border-l-2 border-red-600">
+          <div className="absolute top-4 left-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 border-l-2 border-red-600 pointer-events-none">
             <div className="text-[10px] uppercase tracking-widest text-white/50">Lap</div>
-            <div className="text-2xl font-bold">{hud.lap}</div>
+            <div className="text-xl font-bold">{hud.lap}</div>
           </div>
 
-          <div className="absolute top-6 right-6 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-4 py-2 text-right">
+          <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none">
             <div className="text-[10px] uppercase tracking-widest text-white/50">Current</div>
-            <div className="text-2xl font-bold tabular-nums">{hud.lapTime.toFixed(2)}</div>
+            <div className="text-xl font-bold tabular-nums">{hud.lapTime.toFixed(2)}</div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Best</div>
             <div className="text-sm tabular-nums text-red-400">
               {hud.bestLap > 0 ? hud.bestLap.toFixed(2) : "--.--"}
             </div>
           </div>
+
+          {/* Touch controls (mobile) */}
+          <TouchControls touchRef={touchRef} />
         </>
       )}
+    </div>
+  );
+}
+
+function TouchControls({ touchRef }: { touchRef: React.MutableRefObject<{ accel: boolean; brake: boolean; steer: number; handbrake: boolean }> }) {
+  const wheelRef = useRef<HTMLDivElement>(null);
+
+  const bindHold = (key: "accel" | "brake" | "handbrake") => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      touchRef.current[key] = true;
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      touchRef.current[key] = false;
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    },
+    onPointerCancel: () => { touchRef.current[key] = false; },
+    onPointerLeave: () => { touchRef.current[key] = false; },
+  });
+
+  const onWheelMove = (e: React.PointerEvent) => {
+    if (e.buttons === 0 && e.pointerType === "mouse") return;
+    const el = wheelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width; // 0..1
+    touchRef.current.steer = Math.max(-1, Math.min(1, (x - 0.5) * 2));
+  };
+
+  return (
+    <div className="absolute inset-x-0 bottom-0 z-20 pb-4 px-4 flex items-end justify-between pointer-events-none select-none touch-none">
+      {/* Steering pad (left) */}
+      <div
+        ref={wheelRef}
+        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); onWheelMove(e); }}
+        onPointerMove={onWheelMove}
+        onPointerUp={(e) => { touchRef.current.steer = 0; try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} }}
+        onPointerCancel={() => { touchRef.current.steer = 0; }}
+        className="pointer-events-auto h-28 w-44 rounded-2xl bg-black/40 backdrop-blur border border-white/15 flex items-center justify-center text-white/70 text-xs uppercase tracking-widest touch-none"
+      >
+        ◀ Steer ▶
+      </div>
+
+      {/* Pedals (right) */}
+      <div className="flex gap-3 pointer-events-auto">
+        <button
+          {...bindHold("brake")}
+          className="h-20 w-20 rounded-2xl bg-white/10 backdrop-blur border border-white/20 text-white font-bold text-xs uppercase tracking-widest active:bg-white/20 touch-none"
+        >
+          Brake
+        </button>
+        <button
+          {...bindHold("accel")}
+          className="h-28 w-28 rounded-2xl bg-red-600/90 backdrop-blur border border-red-400 text-white font-black text-sm uppercase tracking-widest active:bg-red-500 shadow-[0_0_30px_rgba(220,0,0,0.5)] touch-none"
+        >
+          Throttle
+        </button>
+      </div>
     </div>
   );
 }
