@@ -957,6 +957,48 @@ function ResultScreen({ result, driver, track, mode, career, onMenu, onAgain }: 
           Menu
         </button>
       </div>
+      {mode === "career" && career && (
+        <div className="mt-6 w-full max-w-sm">
+          <StandingsTable career={career} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StandingsTable({ career, compact = false }: { career: CareerSave; compact?: boolean }) {
+  const standings = career.standings ?? {};
+  const rows = DRIVERS
+    .map((d) => ({ d, pts: standings[d.id] ?? 0 }))
+    .sort((a, b) => b.pts - a.pts);
+  const playerId = career.driverId;
+  return (
+    <div className={`mt-3 border border-white/10 bg-black/30 ${compact ? "text-[10px]" : "text-xs"}`}>
+      <div className="px-2 py-1 bg-white/5 text-white/60 uppercase tracking-widest flex justify-between">
+        <span>Season Standings</span>
+        <span>Pts</span>
+      </div>
+      <div className="max-h-60 overflow-y-auto">
+        {rows.map((r, i) => {
+          const isPlayer = r.d.id === playerId;
+          return (
+            <div
+              key={r.d.id}
+              className={`flex items-center justify-between px-2 py-1 border-t border-white/5 ${isPlayer ? "bg-red-600/20 text-white" : "text-white/80"}`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-5 text-white/40 tabular-nums">{i + 1}</span>
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                  style={{ background: `#${r.d.primary.toString(16).padStart(6, "0")}` }}
+                />
+                <span className="truncate">{r.d.name}</span>
+              </div>
+              <span className={`tabular-nums font-bold ${isPlayer ? "text-red-300" : ""}`}>{r.pts}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
