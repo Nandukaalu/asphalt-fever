@@ -504,30 +504,25 @@ export default function RacingGame() {
   }, [started]);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black">
+    <div className="relative w-full overflow-hidden bg-black touch-none" style={{ height: "100dvh" }}>
       <div ref={mountRef} className="absolute inset-0" />
 
       {!started && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/80 to-black/95 text-white z-10">
-          <h1 className="text-6xl font-black tracking-tight mb-2" style={{ fontFamily: "Inter, sans-serif" }}>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/80 to-black/95 text-white z-10 px-6">
+          <h1 className="text-4xl sm:text-6xl font-black tracking-tight mb-2 text-center" style={{ fontFamily: "Inter, sans-serif" }}>
             APEX <span className="text-red-600">GP</span>
           </h1>
-          <p className="text-sm uppercase tracking-[0.4em] text-white/60 mb-10">Formula Racing • Cockpit Edition</p>
+          <p className="text-[10px] sm:text-sm uppercase tracking-[0.3em] sm:tracking-[0.4em] text-white/60 mb-8 text-center">Formula Racing • Cockpit Edition</p>
 
-          <div className="grid grid-cols-2 gap-x-10 gap-y-2 text-sm mb-10">
-            <div className="text-white/60 text-right">Accelerate</div>
-            <div className="font-mono">W / ↑</div>
-            <div className="text-white/60 text-right">Brake / Reverse</div>
-            <div className="font-mono">S / ↓</div>
-            <div className="text-white/60 text-right">Steer</div>
-            <div className="font-mono">A D / ← →</div>
-            <div className="text-white/60 text-right">Handbrake</div>
-            <div className="font-mono">SPACE</div>
+          <div className="text-xs sm:text-sm text-white/70 mb-8 text-center max-w-xs leading-relaxed">
+            Hold <span className="font-mono text-red-400">Throttle</span> to accelerate, <span className="font-mono text-red-400">Brake</span> to slow.
+            Drag the <span className="font-mono text-red-400">Steer</span> pad left/right to turn.
+            <div className="mt-2 text-white/40">Desktop: W/S to drive, A/D to steer, Space handbrake.</div>
           </div>
 
           <button
             onClick={() => setStarted(true)}
-            className="px-12 py-4 bg-red-600 hover:bg-red-500 transition text-white font-bold tracking-widest uppercase text-lg shadow-[0_0_40px_rgba(220,0,0,0.5)]"
+            className="px-10 sm:px-12 py-4 bg-red-600 hover:bg-red-500 transition text-white font-bold tracking-widest uppercase text-base sm:text-lg shadow-[0_0_40px_rgba(220,0,0,0.5)]"
           >
             Start Race
           </button>
