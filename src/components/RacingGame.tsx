@@ -23,6 +23,8 @@ type CareerSave = {
   driverId: string;
   points: number;
   completed: Record<string, { bestLap: number; position: number; points: number }>;
+  standings: Record<string, number>; // driverId -> total season points
+  rounds: { trackId: string; order: string[] }[]; // finishing order per round
 };
 
 type Mode = "quick" | "career";
@@ -33,6 +35,12 @@ const DRIVERS: Driver[] = [
   { id: "silver", name: "James Hale", team: "Silver Arrows", primary: 0x00d2be, secondary: 0x111111, number: 44 },
   { id: "azure", name: "Liam Beck", team: "Azure Racing", primary: 0x1e3a8a, secondary: 0xfacc15, number: 1 },
   { id: "papaya", name: "Diego Cruz", team: "Papaya Squad", primary: 0xff8000, secondary: 0x000000, number: 4 },
+  { id: "verde", name: "Aiden Walsh", team: "Verde Works", primary: 0x16a34a, secondary: 0xffffff, number: 11 },
+  { id: "cobalt", name: "Mateo Vidal", team: "Cobalt Dynamics", primary: 0x0ea5e9, secondary: 0x0b1d3a, number: 23 },
+  { id: "violet", name: "Noah Becker", team: "Violet Motors", primary: 0x7c3aed, secondary: 0xfde68a, number: 77 },
+  { id: "crimson", name: "Kenji Aoki", team: "Crimson Squad", primary: 0xb91c1c, secondary: 0x111111, number: 31 },
+  { id: "ivory", name: "Lukas Faber", team: "Ivory Tech", primary: 0xf3f4f6, secondary: 0x111111, number: 18 },
+  { id: "onyx", name: "Sam Carter", team: "Onyx Racing", primary: 0x0f172a, secondary: 0xfbbf24, number: 55 },
 ];
 
 // Hand-tuned waypoint loops inspired by real circuits (not actual layouts).
@@ -41,44 +49,44 @@ const TRACKS: TrackDef[] = [
     id: "silverstone",
     name: "Silverstone",
     country: "UK",
-    laps: 3,
+    laps: 15,
     waypoints: [
-      [0, 0], [0, -140], [70, -210], [180, -230], [260, -180], [240, -80],
-      [180, -20], [240, 60], [220, 160], [120, 220], [0, 220], [-120, 200],
-      [-220, 120], [-240, 0], [-180, -90], [-80, -60],
+      [0, 0], [0, -220], [110, -330], [280, -360], [410, -280], [380, -120],
+      [290, -30], [380, 95], [350, 250], [190, 345], [0, 345], [-190, 315],
+      [-345, 190], [-380, 0], [-280, -140], [-130, -95],
     ],
   },
   {
     id: "monza",
     name: "Monza",
     country: "Italy",
-    laps: 3,
+    laps: 15,
     waypoints: [
-      [0, 0], [0, -200], [40, -300], [40, -360], [120, -380], [200, -340],
-      [220, -240], [200, -120], [240, -20], [240, 120], [160, 200],
-      [40, 220], [-80, 200], [-160, 120], [-180, 0], [-120, -80],
+      [0, 0], [0, -320], [60, -470], [60, -570], [190, -600], [320, -540],
+      [350, -380], [320, -190], [380, -30], [380, 190], [255, 320],
+      [60, 350], [-130, 320], [-255, 190], [-285, 0], [-190, -130],
     ],
   },
   {
     id: "monaco",
     name: "Monaco",
     country: "Monte Carlo",
-    laps: 4,
+    laps: 15,
     waypoints: [
-      [0, 0], [20, -60], [60, -90], [110, -80], [140, -40], [180, -20],
-      [200, 30], [180, 80], [120, 110], [60, 140], [0, 160], [-60, 140],
-      [-110, 100], [-140, 50], [-130, 0], [-90, -40], [-50, -50],
+      [0, 0], [35, -110], [110, -160], [200, -145], [260, -75], [330, -35],
+      [365, 55], [330, 145], [220, 200], [110, 250], [0, 285], [-110, 250],
+      [-200, 180], [-255, 90], [-235, 0], [-165, -75], [-90, -90],
     ],
   },
   {
     id: "spa",
     name: "Spa",
     country: "Belgium",
-    laps: 3,
+    laps: 15,
     waypoints: [
-      [0, 0], [0, -120], [60, -200], [160, -240], [260, -200], [320, -100],
-      [300, 0], [240, 60], [280, 160], [220, 260], [100, 280], [-40, 240],
-      [-160, 180], [-260, 80], [-280, -40], [-220, -140], [-120, -120], [-40, -60],
+      [0, 0], [0, -190], [95, -320], [255, -380], [410, -320], [505, -160],
+      [475, 0], [380, 95], [445, 255], [350, 415], [160, 445], [-65, 380],
+      [-255, 285], [-410, 130], [-445, -65], [-350, -220], [-190, -190], [-65, -95],
     ],
   },
 ];
