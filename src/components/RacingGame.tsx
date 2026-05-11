@@ -648,22 +648,40 @@ export default function RacingGame() {
       renderer.render(scene, camera);
 
       if (raceFinished) {
-        // Finalize after a beat
-        const points = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1][position - 1] ?? 0;
-        const r = { position, bestLap, points };
-        setResult(r);
+        const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+        const points = POINTS[position - 1] ?? 0;
+        // Compute final order of every car on the grid
+        const standingsList: { id: string; prog: number }[] = [
+          { id: driver.id, prog: raceProgress + 0.0001 },
+        ];
+        ais.forEach((ai) => {
+          const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+          standingsList.push({ id: ai.driver.id, prog: aiLapEst + ai.t });
+        });
+        standingsList.sort((a, b) => b.prog - a.prog);
+        const order = standingsList.map((s) => s.id);
+        setResult({ position, bestLap, points });
         if (mode === "career") {
-          const cur = loadSave() ?? { driverId: driver.id, points: 0, completed: {} };
+          const cur: CareerSave = loadSave() ?? {
+            driverId: driver.id, points: 0, completed: {}, standings: {}, rounds: [],
+          };
           cur.driverId = driver.id;
+          if (!cur.standings) cur.standings = {};
+          if (!cur.rounds) cur.rounds = [];
           const prev = cur.completed[track.id];
           const newBest = prev && prev.bestLap > 0 && prev.bestLap < bestLap ? prev.bestLap : bestLap;
           cur.completed[track.id] = { bestLap: newBest, position, points };
-          cur.points = Object.values(cur.completed).reduce((a, b) => a + b.points, 0);
+          order.forEach((id, i) => {
+            const pts = POINTS[i] ?? 0;
+            cur.standings[id] = (cur.standings[id] ?? 0) + pts;
+          });
+          cur.rounds.push({ trackId: track.id, order });
+          cur.points = cur.standings[driver.id] ?? 0;
           writeSave(cur);
           setCareer(cur);
         }
         setScreen("result");
-        return; // stop loop
+        return;
       }
 
       raf = requestAnimationFrame(animate);
