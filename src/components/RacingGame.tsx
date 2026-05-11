@@ -12,6 +12,7 @@ export default function RacingGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, lapTime: 0, bestLap: 0 });
   const [started, setStarted] = useState(false);
+  const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
   useEffect(() => {
     if (!started) return;
@@ -398,14 +399,16 @@ export default function RacingGame() {
       last = now;
 
       // Input
-      const accel = keys["w"] || keys["arrowup"];
-      const brake = keys["s"] || keys["arrowdown"];
-      const left = keys["a"] || keys["arrowleft"];
-      const right = keys["d"] || keys["arrowright"];
-      const handbrake = keys[" "];
+      const t = touchRef.current;
+      const accel = keys["w"] || keys["arrowup"] || t.accel;
+      const brake = keys["s"] || keys["arrowdown"] || t.brake;
+      const leftKey = keys["a"] || keys["arrowleft"];
+      const rightKey = keys["d"] || keys["arrowright"];
+      const handbrake = keys[" "] || t.handbrake;
 
       // Steering smoothing (less responsive at high speed for stability)
-      const steerInput = (left ? 1 : 0) - (right ? 1 : 0);
+      const keySteer = (leftKey ? 1 : 0) - (rightKey ? 1 : 0);
+      const steerInput = keySteer !== 0 ? keySteer : -t.steer;
       steering += (steerInput - steering) * Math.min(1, dt * 6);
 
       // Speed
