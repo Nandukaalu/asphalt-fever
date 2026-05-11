@@ -161,7 +161,7 @@ export default function RacingGame() {
     // ---------- Track ----------
     const waypoints = track.waypoints.map(([x, z]) => new THREE.Vector3(x, 0, z));
     const curve = new THREE.CatmullRomCurve3(waypoints, true, "centripetal", 0.5);
-    const TRACK_WIDTH = 14;
+    const TRACK_WIDTH = 24;
     const SEGMENTS = 700;
 
     const trackPositions: number[] = [];
