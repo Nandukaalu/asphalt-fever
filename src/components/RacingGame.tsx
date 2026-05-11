@@ -827,6 +827,7 @@ function MainMenu({ career, onQuick, onCareer, onReset }: {
               <span>Tracks Won</span>
               <span>{Object.values(career.completed).filter((c) => c.position === 1).length}/{TRACKS.length}</span>
             </div>
+            <StandingsTable career={career} compact />
             <button onClick={onReset} className="mt-2 text-white/40 hover:text-red-400 underline text-[10px]">
               Reset career
             </button>
