@@ -23,6 +23,8 @@ type CareerSave = {
   driverId: string;
   points: number;
   completed: Record<string, { bestLap: number; position: number; points: number }>;
+  standings: Record<string, number>; // driverId -> total season points
+  rounds: { trackId: string; order: string[] }[]; // finishing order per round
 };
 
 type Mode = "quick" | "career";
@@ -33,6 +35,12 @@ const DRIVERS: Driver[] = [
   { id: "silver", name: "James Hale", team: "Silver Arrows", primary: 0x00d2be, secondary: 0x111111, number: 44 },
   { id: "azure", name: "Liam Beck", team: "Azure Racing", primary: 0x1e3a8a, secondary: 0xfacc15, number: 1 },
   { id: "papaya", name: "Diego Cruz", team: "Papaya Squad", primary: 0xff8000, secondary: 0x000000, number: 4 },
+  { id: "verde", name: "Aiden Walsh", team: "Verde Works", primary: 0x16a34a, secondary: 0xffffff, number: 11 },
+  { id: "cobalt", name: "Mateo Vidal", team: "Cobalt Dynamics", primary: 0x0ea5e9, secondary: 0x0b1d3a, number: 23 },
+  { id: "violet", name: "Noah Becker", team: "Violet Motors", primary: 0x7c3aed, secondary: 0xfde68a, number: 77 },
+  { id: "crimson", name: "Kenji Aoki", team: "Crimson Squad", primary: 0xb91c1c, secondary: 0x111111, number: 31 },
+  { id: "ivory", name: "Lukas Faber", team: "Ivory Tech", primary: 0xf3f4f6, secondary: 0x111111, number: 18 },
+  { id: "onyx", name: "Sam Carter", team: "Onyx Racing", primary: 0x0f172a, secondary: 0xfbbf24, number: 55 },
 ];
 
 // Hand-tuned waypoint loops inspired by real circuits (not actual layouts).
@@ -41,44 +49,44 @@ const TRACKS: TrackDef[] = [
     id: "silverstone",
     name: "Silverstone",
     country: "UK",
-    laps: 3,
+    laps: 15,
     waypoints: [
-      [0, 0], [0, -140], [70, -210], [180, -230], [260, -180], [240, -80],
-      [180, -20], [240, 60], [220, 160], [120, 220], [0, 220], [-120, 200],
-      [-220, 120], [-240, 0], [-180, -90], [-80, -60],
+      [0, 0], [0, -220], [110, -330], [280, -360], [410, -280], [380, -120],
+      [290, -30], [380, 95], [350, 250], [190, 345], [0, 345], [-190, 315],
+      [-345, 190], [-380, 0], [-280, -140], [-130, -95],
     ],
   },
   {
     id: "monza",
     name: "Monza",
     country: "Italy",
-    laps: 3,
+    laps: 15,
     waypoints: [
-      [0, 0], [0, -200], [40, -300], [40, -360], [120, -380], [200, -340],
-      [220, -240], [200, -120], [240, -20], [240, 120], [160, 200],
-      [40, 220], [-80, 200], [-160, 120], [-180, 0], [-120, -80],
+      [0, 0], [0, -320], [60, -470], [60, -570], [190, -600], [320, -540],
+      [350, -380], [320, -190], [380, -30], [380, 190], [255, 320],
+      [60, 350], [-130, 320], [-255, 190], [-285, 0], [-190, -130],
     ],
   },
   {
     id: "monaco",
     name: "Monaco",
     country: "Monte Carlo",
-    laps: 4,
+    laps: 15,
     waypoints: [
-      [0, 0], [20, -60], [60, -90], [110, -80], [140, -40], [180, -20],
-      [200, 30], [180, 80], [120, 110], [60, 140], [0, 160], [-60, 140],
-      [-110, 100], [-140, 50], [-130, 0], [-90, -40], [-50, -50],
+      [0, 0], [35, -110], [110, -160], [200, -145], [260, -75], [330, -35],
+      [365, 55], [330, 145], [220, 200], [110, 250], [0, 285], [-110, 250],
+      [-200, 180], [-255, 90], [-235, 0], [-165, -75], [-90, -90],
     ],
   },
   {
     id: "spa",
     name: "Spa",
     country: "Belgium",
-    laps: 3,
+    laps: 15,
     waypoints: [
-      [0, 0], [0, -120], [60, -200], [160, -240], [260, -200], [320, -100],
-      [300, 0], [240, 60], [280, 160], [220, 260], [100, 280], [-40, 240],
-      [-160, 180], [-260, 80], [-280, -40], [-220, -140], [-120, -120], [-40, -60],
+      [0, 0], [0, -190], [95, -320], [255, -380], [410, -320], [505, -160],
+      [475, 0], [380, 95], [445, 255], [350, 415], [160, 445], [-65, 380],
+      [-255, 285], [-410, 130], [-445, -65], [-350, -220], [-190, -190], [-65, -95],
     ],
   },
 ];
@@ -153,7 +161,7 @@ export default function RacingGame() {
     // ---------- Track ----------
     const waypoints = track.waypoints.map(([x, z]) => new THREE.Vector3(x, 0, z));
     const curve = new THREE.CatmullRomCurve3(waypoints, true, "centripetal", 0.5);
-    const TRACK_WIDTH = 14;
+    const TRACK_WIDTH = 24;
     const SEGMENTS = 700;
 
     const trackPositions: number[] = [];
@@ -390,13 +398,16 @@ export default function RacingGame() {
 
     // AI cars (other drivers)
     type AI = { car: ReturnType<typeof buildCar>; t: number; speed: number };
-    const ais: AI[] = [];
+    const MAX_SPEED_PREVIEW = 78;
+    const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
+    const ais: (AI & { driver: Driver; offset: number })[] = [];
     const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
     otherDrivers.forEach((d, i) => {
       const c = buildCar(d);
       scene.add(c.group);
-      const tStart = -0.005 - i * 0.008; // slightly behind player
-      ais.push({ car: c, t: (tStart + 1) % 1, speed: 35 + Math.random() * 8 });
+      const tStart = -0.004 - i * 0.005; // staggered grid behind player
+      const lateral = (i % 2 === 0 ? 1 : -1) * (2 + (i % 4)); // weave across track
+      ais.push({ car: c, t: (tStart + 1) % 1, speed: AI_SPEED, driver: d, offset: lateral });
     });
 
     // ---------- Input ----------
@@ -552,21 +563,43 @@ export default function RacingGame() {
       raceProgress = (lap - 1) + ct2.t;
 
       // ---------- AI ----------
+      const cLen = curveLength(curve);
       ais.forEach((ai) => {
-        const targetSpeed = ai.speed;
-        ai.t += (targetSpeed * dt) / curveLength(curve);
+        ai.t += (ai.speed * dt) / cLen;
         if (ai.t >= 1) ai.t -= 1;
         const ap = curve.getPointAt(ai.t);
         const atan = curve.getTangentAt(ai.t).normalize();
-        ai.car.group.position.set(ap.x, 0, ap.z);
+        const an = new THREE.Vector3(-atan.z, 0, atan.x);
+        const px = ap.x + an.x * ai.offset;
+        const pz = ap.z + an.z * ai.offset;
+        ai.car.group.position.set(px, 0, pz);
         ai.car.group.rotation.y = Math.atan2(atan.x, atan.z);
-        ai.car.wheels.forEach((w) => (w.rotation.x += (targetSpeed * dt) / 0.36));
+        ai.car.wheels.forEach((w) => (w.rotation.x += (ai.speed * dt) / 0.36));
+
+        // Hitbox vs player car
+        const ddx = carPos.x - px;
+        const ddz = carPos.z - pz;
+        const distSq = ddx * ddx + ddz * ddz;
+        if (distSq < 2.5 * 2.5) {
+          const len = Math.sqrt(distSq) || 1;
+          const nx = ddx / len, nz = ddz / len;
+          const overlap = 2.5 - len;
+          carPos.x += nx * overlap;
+          carPos.z += nz * overlap;
+          speed *= 0.78;
+          lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
+          ai.speed = AI_SPEED * 0.85;
+        } else {
+          ai.speed += (AI_SPEED - ai.speed) * Math.min(1, dt * 0.5);
+        }
       });
 
-      // Position calc
+      // Position calc — sort all cars by total progress
       let position = 1;
+      const playerLapFrac = raceProgress % 1;
       ais.forEach((ai) => {
-        const aiProg = Math.floor(raceProgress) + ai.t; // approx same lap
+        const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+        const aiProg = aiLapEst + ai.t;
         if (aiProg > raceProgress) position++;
       });
 
@@ -615,22 +648,40 @@ export default function RacingGame() {
       renderer.render(scene, camera);
 
       if (raceFinished) {
-        // Finalize after a beat
-        const points = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1][position - 1] ?? 0;
-        const r = { position, bestLap, points };
-        setResult(r);
+        const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+        const points = POINTS[position - 1] ?? 0;
+        // Compute final order of every car on the grid
+        const standingsList: { id: string; prog: number }[] = [
+          { id: driver.id, prog: raceProgress + 0.0001 },
+        ];
+        ais.forEach((ai) => {
+          const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+          standingsList.push({ id: ai.driver.id, prog: aiLapEst + ai.t });
+        });
+        standingsList.sort((a, b) => b.prog - a.prog);
+        const order = standingsList.map((s) => s.id);
+        setResult({ position, bestLap, points });
         if (mode === "career") {
-          const cur = loadSave() ?? { driverId: driver.id, points: 0, completed: {} };
+          const cur: CareerSave = loadSave() ?? {
+            driverId: driver.id, points: 0, completed: {}, standings: {}, rounds: [],
+          };
           cur.driverId = driver.id;
+          if (!cur.standings) cur.standings = {};
+          if (!cur.rounds) cur.rounds = [];
           const prev = cur.completed[track.id];
           const newBest = prev && prev.bestLap > 0 && prev.bestLap < bestLap ? prev.bestLap : bestLap;
           cur.completed[track.id] = { bestLap: newBest, position, points };
-          cur.points = Object.values(cur.completed).reduce((a, b) => a + b.points, 0);
+          order.forEach((id, i) => {
+            const pts = POINTS[i] ?? 0;
+            cur.standings[id] = (cur.standings[id] ?? 0) + pts;
+          });
+          cur.rounds.push({ trackId: track.id, order });
+          cur.points = cur.standings[driver.id] ?? 0;
           writeSave(cur);
           setCareer(cur);
         }
         setScreen("result");
-        return; // stop loop
+        return;
       }
 
       raf = requestAnimationFrame(animate);
@@ -776,6 +827,7 @@ function MainMenu({ career, onQuick, onCareer, onReset }: {
               <span>Tracks Won</span>
               <span>{Object.values(career.completed).filter((c) => c.position === 1).length}/{TRACKS.length}</span>
             </div>
+            <StandingsTable career={career} compact />
             <button onClick={onReset} className="mt-2 text-white/40 hover:text-red-400 underline text-[10px]">
               Reset career
             </button>
@@ -904,6 +956,48 @@ function ResultScreen({ result, driver, track, mode, career, onMenu, onAgain }: 
         <button onClick={onMenu} className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold tracking-widest uppercase">
           Menu
         </button>
+      </div>
+      {mode === "career" && career && (
+        <div className="mt-6 w-full max-w-sm">
+          <StandingsTable career={career} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StandingsTable({ career, compact = false }: { career: CareerSave; compact?: boolean }) {
+  const standings = career.standings ?? {};
+  const rows = DRIVERS
+    .map((d) => ({ d, pts: standings[d.id] ?? 0 }))
+    .sort((a, b) => b.pts - a.pts);
+  const playerId = career.driverId;
+  return (
+    <div className={`mt-3 border border-white/10 bg-black/30 ${compact ? "text-[10px]" : "text-xs"}`}>
+      <div className="px-2 py-1 bg-white/5 text-white/60 uppercase tracking-widest flex justify-between">
+        <span>Season Standings</span>
+        <span>Pts</span>
+      </div>
+      <div className="max-h-60 overflow-y-auto">
+        {rows.map((r, i) => {
+          const isPlayer = r.d.id === playerId;
+          return (
+            <div
+              key={r.d.id}
+              className={`flex items-center justify-between px-2 py-1 border-t border-white/5 ${isPlayer ? "bg-red-600/20 text-white" : "text-white/80"}`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-5 text-white/40 tabular-nums">{i + 1}</span>
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+                  style={{ background: `#${r.d.primary.toString(16).padStart(6, "0")}` }}
+                />
+                <span className="truncate">{r.d.name}</span>
+              </div>
+              <span className={`tabular-nums font-bold ${isPlayer ? "text-red-300" : ""}`}>{r.pts}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
