@@ -131,13 +131,33 @@ function writeSave(s: CareerSave) {
 export default function RacingGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, totalLaps: 3, lapTime: 0, bestLap: 0, position: 1 });
-  const [screen, setScreen] = useState<"menu" | "driver" | "track" | "racing" | "result">("menu");
+  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "lobby" | "racing" | "result">("menu");
   const [mode, setMode] = useState<Mode>("quick");
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
+
+  // -------- Multiplayer state --------
+  const [roomCode, setRoomCode] = useState<string>("");
+  const [playerName, setPlayerName] = useState<string>(() => {
+    if (typeof window === "undefined") return "Driver";
+    return localStorage.getItem("apex-name") || `Driver${Math.floor(Math.random() * 900 + 100)}`;
+  });
+  const [isHost, setIsHost] = useState(false);
+  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
+  const playerIdRef = useRef<string>("");
+  if (!playerIdRef.current && typeof window !== "undefined") {
+    playerIdRef.current = Math.random().toString(36).slice(2, 10);
+  }
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const remotesRef = useRef<Map<string, RemotePlayer>>(new Map());
+  const startSignalRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    try { localStorage.setItem("apex-name", playerName); } catch {}
+  }, [playerName]);
 
   useEffect(() => { setCareer(loadSave()); }, []);
 
