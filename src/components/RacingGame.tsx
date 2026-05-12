@@ -1290,10 +1290,12 @@ function Lobby({ roomCode, isHost, players, track, onChangeTrack, onChangeDriver
   );
 }
 
-function TrackSelect({ trackId, career, mode, onPick, onBack, onStart }: {
+function TrackSelect({ trackId, career, mode, lapsChoice, onPickLaps, onPick, onBack, onStart }: {
   trackId: string;
   career: CareerSave | null;
   mode: Mode;
+  lapsChoice: 3 | 5 | 10;
+  onPickLaps: (n: 3 | 5 | 10) => void;
   onPick: (id: string) => void;
   onBack: () => void;
   onStart: () => void;
@@ -1304,6 +1306,21 @@ function TrackSelect({ trackId, career, mode, onPick, onBack, onStart }: {
         <button onClick={onBack} className="text-white/60 hover:text-white text-xs uppercase tracking-widest mb-4">← Back</button>
         <h2 className="text-3xl sm:text-4xl font-black mb-1">Choose Track</h2>
         <p className="text-white/50 text-sm mb-6 uppercase tracking-widest">{mode === "career" ? "Career round" : "Quick race"}</p>
+
+        <div className="mb-6">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">Race length</div>
+          <div className="flex gap-2">
+            {([3, 5, 10] as const).map((n) => (
+              <button
+                key={n}
+                onClick={() => onPickLaps(n)}
+                className={`flex-1 py-2 border-2 font-bold uppercase tracking-widest text-sm ${lapsChoice === n ? "border-red-500 bg-red-500/15 text-white" : "border-white/20 bg-black/40 text-white/70 hover:border-white/40"}`}
+              >
+                {n} Laps
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {TRACKS.map((t) => {
