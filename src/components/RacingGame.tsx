@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { supabase } from "@/integrations/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -27,7 +29,26 @@ type CareerSave = {
   rounds: { trackId: string; order: string[] }[]; // finishing order per round
 };
 
-type Mode = "quick" | "career";
+type Mode = "quick" | "career" | "multi";
+
+type RemotePlayer = {
+  id: string;
+  name: string;
+  driverId: string;
+  x: number;
+  z: number;
+  heading: number;
+  speed: number;
+  progress: number;
+  lastUpdate: number;
+};
+
+type LobbyPlayer = {
+  id: string;
+  name: string;
+  driverId: string;
+  isHost: boolean;
+};
 
 // ---------------- Data ----------------
 const DRIVERS: Driver[] = [
@@ -110,7 +131,7 @@ function writeSave(s: CareerSave) {
 export default function RacingGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, totalLaps: 3, lapTime: 0, bestLap: 0, position: 1 });
-  const [screen, setScreen] = useState<"menu" | "driver" | "track" | "racing" | "result">("menu");
+  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "lobby" | "racing" | "result">("menu");
   const [mode, setMode] = useState<Mode>("quick");
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
@@ -118,10 +139,121 @@ export default function RacingGame() {
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
+  // -------- Multiplayer state --------
+  const [roomCode, setRoomCode] = useState<string>("");
+  const [playerName, setPlayerName] = useState<string>(() => {
+    if (typeof window === "undefined") return "Driver";
+    return localStorage.getItem("apex-name") || `Driver${Math.floor(Math.random() * 900 + 100)}`;
+  });
+  const [isHost, setIsHost] = useState(false);
+  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
+  const playerIdRef = useRef<string>("");
+  if (!playerIdRef.current && typeof window !== "undefined") {
+    playerIdRef.current = Math.random().toString(36).slice(2, 10);
+  }
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const remotesRef = useRef<Map<string, RemotePlayer>>(new Map());
+  const startSignalRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    try { localStorage.setItem("apex-name", playerName); } catch {}
+  }, [playerName]);
+
   useEffect(() => { setCareer(loadSave()); }, []);
 
   const driver = useMemo(() => DRIVERS.find((d) => d.id === driverId)!, [driverId]);
   const track = useMemo(() => TRACKS.find((t) => t.id === trackId)!, [trackId]);
+
+  // -------- Multiplayer helpers --------
+  function leaveRoom() {
+    const ch = channelRef.current;
+    if (ch) {
+      try { supabase.removeChannel(ch); } catch {}
+    }
+    channelRef.current = null;
+    remotesRef.current.clear();
+    setLobbyPlayers([]);
+    setIsHost(false);
+    setRoomCode("");
+    startSignalRef.current = false;
+  }
+
+  function joinChannel(code: string, asHost: boolean, initialDriverId: string, initialTrackId: string) {
+    const ch = supabase.channel(`race-${code}`, {
+      config: { presence: { key: playerIdRef.current }, broadcast: { self: false } },
+    });
+    channelRef.current = ch;
+
+    ch.on("presence", { event: "sync" }, () => {
+      const state = ch.presenceState() as Record<string, Array<{ name: string; driverId: string; isHost: boolean; trackId?: string }>>;
+      const players: LobbyPlayer[] = [];
+      let hostTrackId: string | undefined;
+      for (const [pid, metas] of Object.entries(state)) {
+        const meta = metas[0];
+        if (!meta) continue;
+        players.push({ id: pid, name: meta.name, driverId: meta.driverId, isHost: !!meta.isHost });
+        if (meta.isHost && meta.trackId) hostTrackId = meta.trackId;
+      }
+      players.sort((a, b) => (a.isHost === b.isHost ? a.name.localeCompare(b.name) : a.isHost ? -1 : 1));
+      setLobbyPlayers(players);
+      if (!asHost && hostTrackId) setTrackId(hostTrackId);
+    });
+
+    ch.on("broadcast", { event: "start" }, () => {
+      startSignalRef.current = true;
+      setResult(null);
+      setScreen("racing");
+    });
+
+    ch.on("broadcast", { event: "pos" }, (payload: any) => {
+      const p = payload.payload as RemotePlayer;
+      if (!p || p.id === playerIdRef.current) return;
+      const existing = remotesRef.current.get(p.id);
+      remotesRef.current.set(p.id, { ...p, lastUpdate: performance.now() });
+      // keep prior driverId/name if missing
+      if (existing && !p.name) remotesRef.current.get(p.id)!.name = existing.name;
+    });
+
+    ch.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await ch.track({
+          name: playerName,
+          driverId: initialDriverId,
+          isHost: asHost,
+          trackId: asHost ? initialTrackId : undefined,
+        });
+      }
+    });
+  }
+
+  async function updatePresence(extra: { driverId?: string; trackId?: string }) {
+    const ch = channelRef.current;
+    if (!ch) return;
+    await ch.track({
+      name: playerName,
+      driverId: extra.driverId ?? driverId,
+      isHost,
+      trackId: isHost ? (extra.trackId ?? trackId) : undefined,
+    });
+  }
+
+  function broadcastStart() {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.send({ type: "broadcast", event: "start", payload: { trackId } });
+    setResult(null);
+    setScreen("racing");
+  }
+
+  function genCode() {
+    return Math.random().toString(36).slice(2, 7).toUpperCase();
+  }
+
+  // Cleanup channel when component unmounts
+  useEffect(() => {
+    return () => { leaveRoom(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ============ Three.js race loop ============
   useEffect(() => {
@@ -401,14 +533,39 @@ export default function RacingGame() {
     const MAX_SPEED_PREVIEW = 78;
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
     const ais: (AI & { driver: Driver; offset: number })[] = [];
-    const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
-    otherDrivers.forEach((d, i) => {
-      const c = buildCar(d);
-      scene.add(c.group);
-      const tStart = -0.004 - i * 0.005; // staggered grid behind player
-      const lateral = (i % 2 === 0 ? 1 : -1) * (2 + (i % 4)); // weave across track
-      ais.push({ car: c, t: (tStart + 1) % 1, speed: AI_SPEED, driver: d, offset: lateral });
-    });
+    const isMulti = mode === "multi";
+    if (!isMulti) {
+      const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
+      otherDrivers.forEach((d, i) => {
+        const c = buildCar(d);
+        scene.add(c.group);
+        const tStart = -0.004 - i * 0.005;
+        const lateral = (i % 2 === 0 ? 1 : -1) * (2 + (i % 4));
+        ais.push({ car: c, t: (tStart + 1) % 1, speed: AI_SPEED, driver: d, offset: lateral });
+      });
+    }
+
+    // Remote multiplayer cars (mesh per remote player id)
+    const remoteCars = new Map<string, ReturnType<typeof buildCar>>();
+    function ensureRemoteCar(p: RemotePlayer) {
+      let car = remoteCars.get(p.id);
+      if (!car) {
+        const drv = DRIVERS.find((d) => d.id === p.driverId) ?? DRIVERS[0];
+        car = buildCar(drv);
+        scene.add(car.group);
+        remoteCars.set(p.id, car);
+      }
+      return car;
+    }
+    function disposeRemoteCar(id: string) {
+      const car = remoteCars.get(id);
+      if (car) {
+        scene.remove(car.group);
+        remoteCars.delete(id);
+      }
+    }
+
+    let lastBroadcast = 0;
 
     // ---------- Input ----------
     const keys: Record<string, boolean> = {};
@@ -564,7 +721,7 @@ export default function RacingGame() {
 
       // ---------- AI ----------
       const cLen = curveLength(curve);
-      ais.forEach((ai) => {
+      if (!isMulti) ais.forEach((ai) => {
         ai.t += (ai.speed * dt) / cLen;
         if (ai.t >= 1) ai.t -= 1;
         const ap = curve.getPointAt(ai.t);
@@ -594,14 +751,73 @@ export default function RacingGame() {
         }
       });
 
+      // ---------- Remote multiplayer cars ----------
+      if (isMulti) {
+        const nowMs = performance.now();
+        const stale: string[] = [];
+        remotesRef.current.forEach((rp, id) => {
+          if (nowMs - rp.lastUpdate > 8000) { stale.push(id); return; }
+          const car = ensureRemoteCar(rp);
+          // Smooth interpolation toward last received pose
+          car.group.position.x += (rp.x - car.group.position.x) * Math.min(1, dt * 12);
+          car.group.position.z += (rp.z - car.group.position.z) * Math.min(1, dt * 12);
+          // shortest-arc heading lerp
+          let dh = rp.heading - car.group.rotation.y;
+          while (dh > Math.PI) dh -= Math.PI * 2;
+          while (dh < -Math.PI) dh += Math.PI * 2;
+          car.group.rotation.y += dh * Math.min(1, dt * 12);
+          car.wheels.forEach((w) => (w.rotation.x += (rp.speed * dt) / 0.36));
+
+          // Hitbox vs player
+          const ddx = carPos.x - car.group.position.x;
+          const ddz = carPos.z - car.group.position.z;
+          const dSq = ddx * ddx + ddz * ddz;
+          if (dSq < 2.5 * 2.5) {
+            const len = Math.sqrt(dSq) || 1;
+            const nx = ddx / len, nz = ddz / len;
+            const overlap = 2.5 - len;
+            carPos.x += nx * overlap;
+            carPos.z += nz * overlap;
+            speed *= 0.78;
+          }
+        });
+        stale.forEach((id) => { remotesRef.current.delete(id); disposeRemoteCar(id); });
+
+        // Broadcast our pose ~15 Hz
+        if (channelRef.current && now - lastBroadcast > 65) {
+          lastBroadcast = now;
+          channelRef.current.send({
+            type: "broadcast",
+            event: "pos",
+            payload: {
+              id: playerIdRef.current,
+              name: playerName,
+              driverId: driver.id,
+              x: carPos.x,
+              z: carPos.z,
+              heading,
+              speed,
+              progress: raceProgress,
+              lastUpdate: 0,
+            } as RemotePlayer,
+          });
+        }
+      }
+
       // Position calc — sort all cars by total progress
       let position = 1;
       const playerLapFrac = raceProgress % 1;
-      ais.forEach((ai) => {
-        const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
-        const aiProg = aiLapEst + ai.t;
-        if (aiProg > raceProgress) position++;
-      });
+      if (isMulti) {
+        remotesRef.current.forEach((rp) => {
+          if (rp.progress > raceProgress) position++;
+        });
+      } else {
+        ais.forEach((ai) => {
+          const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+          const aiProg = aiLapEst + ai.t;
+          if (aiProg > raceProgress) position++;
+        });
+      }
 
       // ---------- Camera ----------
       let camWorld: THREE.Vector3;
@@ -654,10 +870,16 @@ export default function RacingGame() {
         const standingsList: { id: string; prog: number }[] = [
           { id: driver.id, prog: raceProgress + 0.0001 },
         ];
-        ais.forEach((ai) => {
-          const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
-          standingsList.push({ id: ai.driver.id, prog: aiLapEst + ai.t });
-        });
+        if (isMulti) {
+          remotesRef.current.forEach((rp) => {
+            standingsList.push({ id: rp.driverId, prog: rp.progress });
+          });
+        } else {
+          ais.forEach((ai) => {
+            const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+            standingsList.push({ id: ai.driver.id, prog: aiLapEst + ai.t });
+          });
+        }
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
         setResult({ position, bestLap, points });
@@ -709,16 +931,47 @@ export default function RacingGame() {
           career={career}
           onQuick={() => { setMode("quick"); setScreen("driver"); }}
           onCareer={() => { setMode("career"); setScreen("driver"); }}
+          onMulti={() => { setMode("multi"); setScreen("multi"); }}
           onReset={() => { try { localStorage.removeItem(SAVE_KEY); } catch {}; setCareer(null); }}
+        />
+      )}
+
+      {screen === "multi" && (
+        <MultiplayerEntry
+          playerName={playerName}
+          setPlayerName={setPlayerName}
+          onBack={() => { leaveRoom(); setScreen("menu"); }}
+          onCreate={() => {
+            const code = genCode();
+            setRoomCode(code);
+            setIsHost(true);
+            joinChannel(code, true, driverId, trackId);
+            setScreen("driver");
+          }}
+          onJoin={(code) => {
+            const c = code.trim().toUpperCase();
+            if (c.length < 3) return;
+            setRoomCode(c);
+            setIsHost(false);
+            joinChannel(c, false, driverId, trackId);
+            setScreen("driver");
+          }}
         />
       )}
 
       {screen === "driver" && (
         <DriverSelect
           driverId={driverId}
-          onPick={(id) => setDriverId(id)}
+          onPick={(id) => { setDriverId(id); if (mode === "multi") updatePresence({ driverId: id }); }}
           onBack={() => setScreen("menu")}
-          onNext={() => setScreen("track")}
+          onNext={() => {
+            if (mode === "multi") {
+              if (isHost) setScreen("track");
+              else setScreen("lobby");
+            } else {
+              setScreen("track");
+            }
+          }}
         />
       )}
 
@@ -727,9 +980,25 @@ export default function RacingGame() {
           trackId={trackId}
           career={career}
           mode={mode}
-          onPick={(id) => setTrackId(id)}
+          onPick={(id) => { setTrackId(id); if (mode === "multi" && isHost) updatePresence({ trackId: id }); }}
           onBack={() => setScreen("driver")}
-          onStart={() => { setResult(null); setScreen("racing"); }}
+          onStart={() => {
+            if (mode === "multi") setScreen("lobby");
+            else { setResult(null); setScreen("racing"); }
+          }}
+        />
+      )}
+
+      {screen === "lobby" && (
+        <Lobby
+          roomCode={roomCode}
+          isHost={isHost}
+          players={lobbyPlayers}
+          track={track}
+          onChangeTrack={() => setScreen("track")}
+          onChangeDriver={() => setScreen("driver")}
+          onStart={broadcastStart}
+          onLeave={() => { leaveRoom(); setScreen("menu"); }}
         />
       )}
 
@@ -794,10 +1063,11 @@ function curveLength(curve: THREE.CatmullRomCurve3) {
 }
 
 // ---------------- UI Subcomponents ----------------
-function MainMenu({ career, onQuick, onCareer, onReset }: {
+function MainMenu({ career, onQuick, onCareer, onMulti, onReset }: {
   career: CareerSave | null;
   onQuick: () => void;
   onCareer: () => void;
+  onMulti: () => void;
   onReset: () => void;
 }) {
   return (
@@ -815,6 +1085,9 @@ function MainMenu({ career, onQuick, onCareer, onReset }: {
         </button>
         <button onClick={onCareer} className="px-6 py-4 bg-red-600 hover:bg-red-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]">
           Career Mode
+        </button>
+        <button onClick={onMulti} className="px-6 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(0,80,220,0.45)]">
+          Multiplayer
         </button>
         {career && (
           <div className="mt-4 p-3 border border-white/10 bg-black/30 text-xs">
@@ -874,6 +1147,134 @@ function DriverSelect({ driverId, onPick, onBack, onNext }: {
         <button onClick={onNext} className="mt-8 w-full sm:w-auto px-10 py-4 bg-red-600 hover:bg-red-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]">
           Continue →
         </button>
+      </div>
+    </div>
+  );
+}
+
+function MultiplayerEntry({ playerName, setPlayerName, onCreate, onJoin, onBack }: {
+  playerName: string;
+  setPlayerName: (n: string) => void;
+  onCreate: () => void;
+  onJoin: (code: string) => void;
+  onBack: () => void;
+}) {
+  const [code, setCode] = useState("");
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/85 to-black/95 text-white z-20 px-6">
+      <button onClick={onBack} className="absolute top-4 left-4 text-white/60 hover:text-white text-xs uppercase tracking-widest">← Menu</button>
+      <h2 className="text-4xl sm:text-5xl font-black mb-2">Multiplayer</h2>
+      <p className="text-white/50 text-xs sm:text-sm uppercase tracking-widest mb-8">Race your friends online</p>
+
+      <div className="w-full max-w-xs space-y-4">
+        <div>
+          <label className="block text-[10px] uppercase tracking-widest text-white/50 mb-1">Your name</label>
+          <input
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value.slice(0, 16))}
+            className="w-full bg-black/50 border border-white/20 px-3 py-2 text-white font-mono"
+            placeholder="Your driver name"
+          />
+        </div>
+
+        <button
+          onClick={onCreate}
+          className="w-full px-6 py-4 bg-red-600 hover:bg-red-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]"
+        >
+          Create Room
+        </button>
+
+        <div className="text-center text-white/40 text-xs uppercase tracking-widest">— or —</div>
+
+        <div className="space-y-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
+            className="w-full bg-black/50 border border-white/20 px-3 py-3 text-white font-mono tracking-[0.4em] text-center text-xl uppercase"
+            placeholder="CODE"
+          />
+          <button
+            onClick={() => onJoin(code)}
+            disabled={code.trim().length < 3}
+            className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black tracking-widest uppercase"
+          >
+            Join Room
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Lobby({ roomCode, isHost, players, track, onChangeTrack, onChangeDriver, onStart, onLeave }: {
+  roomCode: string;
+  isHost: boolean;
+  players: LobbyPlayer[];
+  track: TrackDef;
+  onChangeTrack: () => void;
+  onChangeDriver: () => void;
+  onStart: () => void;
+  onLeave: () => void;
+}) {
+  const copyCode = () => {
+    try { navigator.clipboard.writeText(roomCode); } catch {}
+  };
+  return (
+    <div className="absolute inset-0 bg-gradient-to-b from-black/90 to-black/95 text-white z-20 px-4 py-8 overflow-y-auto">
+      <div className="max-w-xl mx-auto">
+        <button onClick={onLeave} className="text-white/60 hover:text-white text-xs uppercase tracking-widest mb-4">← Leave Room</button>
+        <h2 className="text-3xl sm:text-4xl font-black mb-2">Race Lobby</h2>
+
+        <div className="mb-6 p-4 border border-white/15 bg-black/40">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Room code — share with friends</div>
+          <div className="flex items-center gap-3">
+            <div className="text-4xl sm:text-5xl font-black tracking-[0.3em] text-red-400 font-mono">{roomCode}</div>
+            <button onClick={copyCode} className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest">Copy</button>
+          </div>
+        </div>
+
+        <div className="mb-6 p-4 border border-white/15 bg-black/40 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50">Track</div>
+            <div className="text-xl font-bold">{track.name} <span className="text-white/40 text-sm font-normal">• {track.country} • {track.laps} laps</span></div>
+          </div>
+          {isHost && (
+            <button onClick={onChangeTrack} className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest">Change</button>
+          )}
+        </div>
+
+        <div className="mb-6 p-4 border border-white/15 bg-black/40">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] uppercase tracking-widest text-white/50">Drivers in room ({players.length})</div>
+            <button onClick={onChangeDriver} className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest">Change Driver</button>
+          </div>
+          <div className="space-y-1">
+            {players.length === 0 && <div className="text-white/40 text-sm">Waiting for players to connect…</div>}
+            {players.map((p) => {
+              const d = DRIVERS.find((x) => x.id === p.driverId);
+              return (
+                <div key={p.id} className="flex items-center gap-2 px-2 py-1.5 bg-white/5">
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: d ? `#${d.primary.toString(16).padStart(6, "0")}` : "#888" }} />
+                  <span className="font-bold">{p.name}</span>
+                  <span className="text-white/50 text-xs">{d?.team ?? "—"}</span>
+                  {p.isHost && <span className="ml-auto text-[10px] uppercase tracking-widest text-red-400">Host</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {isHost ? (
+          <button
+            onClick={onStart}
+            disabled={players.length < 1}
+            className="w-full px-10 py-4 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]"
+          >
+            Start Race
+          </button>
+        ) : (
+          <div className="text-center text-white/60 text-sm uppercase tracking-widest">Waiting for host to start…</div>
+        )}
       </div>
     </div>
   );
