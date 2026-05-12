@@ -1152,6 +1152,134 @@ function DriverSelect({ driverId, onPick, onBack, onNext }: {
   );
 }
 
+function MultiplayerEntry({ playerName, setPlayerName, onCreate, onJoin, onBack }: {
+  playerName: string;
+  setPlayerName: (n: string) => void;
+  onCreate: () => void;
+  onJoin: (code: string) => void;
+  onBack: () => void;
+}) {
+  const [code, setCode] = useState("");
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/85 to-black/95 text-white z-20 px-6">
+      <button onClick={onBack} className="absolute top-4 left-4 text-white/60 hover:text-white text-xs uppercase tracking-widest">← Menu</button>
+      <h2 className="text-4xl sm:text-5xl font-black mb-2">Multiplayer</h2>
+      <p className="text-white/50 text-xs sm:text-sm uppercase tracking-widest mb-8">Race your friends online</p>
+
+      <div className="w-full max-w-xs space-y-4">
+        <div>
+          <label className="block text-[10px] uppercase tracking-widest text-white/50 mb-1">Your name</label>
+          <input
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value.slice(0, 16))}
+            className="w-full bg-black/50 border border-white/20 px-3 py-2 text-white font-mono"
+            placeholder="Your driver name"
+          />
+        </div>
+
+        <button
+          onClick={onCreate}
+          className="w-full px-6 py-4 bg-red-600 hover:bg-red-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]"
+        >
+          Create Room
+        </button>
+
+        <div className="text-center text-white/40 text-xs uppercase tracking-widest">— or —</div>
+
+        <div className="space-y-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
+            className="w-full bg-black/50 border border-white/20 px-3 py-3 text-white font-mono tracking-[0.4em] text-center text-xl uppercase"
+            placeholder="CODE"
+          />
+          <button
+            onClick={() => onJoin(code)}
+            disabled={code.trim().length < 3}
+            className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black tracking-widest uppercase"
+          >
+            Join Room
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Lobby({ roomCode, isHost, players, track, onChangeTrack, onChangeDriver, onStart, onLeave }: {
+  roomCode: string;
+  isHost: boolean;
+  players: LobbyPlayer[];
+  track: TrackDef;
+  onChangeTrack: () => void;
+  onChangeDriver: () => void;
+  onStart: () => void;
+  onLeave: () => void;
+}) {
+  const copyCode = () => {
+    try { navigator.clipboard.writeText(roomCode); } catch {}
+  };
+  return (
+    <div className="absolute inset-0 bg-gradient-to-b from-black/90 to-black/95 text-white z-20 px-4 py-8 overflow-y-auto">
+      <div className="max-w-xl mx-auto">
+        <button onClick={onLeave} className="text-white/60 hover:text-white text-xs uppercase tracking-widest mb-4">← Leave Room</button>
+        <h2 className="text-3xl sm:text-4xl font-black mb-2">Race Lobby</h2>
+
+        <div className="mb-6 p-4 border border-white/15 bg-black/40">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Room code — share with friends</div>
+          <div className="flex items-center gap-3">
+            <div className="text-4xl sm:text-5xl font-black tracking-[0.3em] text-red-400 font-mono">{roomCode}</div>
+            <button onClick={copyCode} className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest">Copy</button>
+          </div>
+        </div>
+
+        <div className="mb-6 p-4 border border-white/15 bg-black/40 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-white/50">Track</div>
+            <div className="text-xl font-bold">{track.name} <span className="text-white/40 text-sm font-normal">• {track.country} • {track.laps} laps</span></div>
+          </div>
+          {isHost && (
+            <button onClick={onChangeTrack} className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest">Change</button>
+          )}
+        </div>
+
+        <div className="mb-6 p-4 border border-white/15 bg-black/40">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] uppercase tracking-widest text-white/50">Drivers in room ({players.length})</div>
+            <button onClick={onChangeDriver} className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest">Change Driver</button>
+          </div>
+          <div className="space-y-1">
+            {players.length === 0 && <div className="text-white/40 text-sm">Waiting for players to connect…</div>}
+            {players.map((p) => {
+              const d = DRIVERS.find((x) => x.id === p.driverId);
+              return (
+                <div key={p.id} className="flex items-center gap-2 px-2 py-1.5 bg-white/5">
+                  <span className="inline-block w-3 h-3 rounded-sm" style={{ background: d ? `#${d.primary.toString(16).padStart(6, "0")}` : "#888" }} />
+                  <span className="font-bold">{p.name}</span>
+                  <span className="text-white/50 text-xs">{d?.team ?? "—"}</span>
+                  {p.isHost && <span className="ml-auto text-[10px] uppercase tracking-widest text-red-400">Host</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {isHost ? (
+          <button
+            onClick={onStart}
+            disabled={players.length < 1}
+            className="w-full px-10 py-4 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]"
+          >
+            Start Race
+          </button>
+        ) : (
+          <div className="text-center text-white/60 text-sm uppercase tracking-widest">Waiting for host to start…</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TrackSelect({ trackId, career, mode, onPick, onBack, onStart }: {
   trackId: string;
   career: CareerSave | null;
