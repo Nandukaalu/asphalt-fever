@@ -164,6 +164,97 @@ export default function RacingGame() {
   const driver = useMemo(() => DRIVERS.find((d) => d.id === driverId)!, [driverId]);
   const track = useMemo(() => TRACKS.find((t) => t.id === trackId)!, [trackId]);
 
+  // -------- Multiplayer helpers --------
+  function leaveRoom() {
+    const ch = channelRef.current;
+    if (ch) {
+      try { supabase.removeChannel(ch); } catch {}
+    }
+    channelRef.current = null;
+    remotesRef.current.clear();
+    setLobbyPlayers([]);
+    setIsHost(false);
+    setRoomCode("");
+    startSignalRef.current = false;
+  }
+
+  function joinChannel(code: string, asHost: boolean, initialDriverId: string, initialTrackId: string) {
+    const ch = supabase.channel(`race-${code}`, {
+      config: { presence: { key: playerIdRef.current }, broadcast: { self: false } },
+    });
+    channelRef.current = ch;
+
+    ch.on("presence", { event: "sync" }, () => {
+      const state = ch.presenceState() as Record<string, Array<{ name: string; driverId: string; isHost: boolean; trackId?: string }>>;
+      const players: LobbyPlayer[] = [];
+      let hostTrackId: string | undefined;
+      for (const [pid, metas] of Object.entries(state)) {
+        const meta = metas[0];
+        if (!meta) continue;
+        players.push({ id: pid, name: meta.name, driverId: meta.driverId, isHost: !!meta.isHost });
+        if (meta.isHost && meta.trackId) hostTrackId = meta.trackId;
+      }
+      players.sort((a, b) => (a.isHost === b.isHost ? a.name.localeCompare(b.name) : a.isHost ? -1 : 1));
+      setLobbyPlayers(players);
+      if (!asHost && hostTrackId) setTrackId(hostTrackId);
+    });
+
+    ch.on("broadcast", { event: "start" }, () => {
+      startSignalRef.current = true;
+      setResult(null);
+      setScreen("racing");
+    });
+
+    ch.on("broadcast", { event: "pos" }, (payload: any) => {
+      const p = payload.payload as RemotePlayer;
+      if (!p || p.id === playerIdRef.current) return;
+      const existing = remotesRef.current.get(p.id);
+      remotesRef.current.set(p.id, { ...p, lastUpdate: performance.now() });
+      // keep prior driverId/name if missing
+      if (existing && !p.name) remotesRef.current.get(p.id)!.name = existing.name;
+    });
+
+    ch.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await ch.track({
+          name: playerName,
+          driverId: initialDriverId,
+          isHost: asHost,
+          trackId: asHost ? initialTrackId : undefined,
+        });
+      }
+    });
+  }
+
+  async function updatePresence(extra: { driverId?: string; trackId?: string }) {
+    const ch = channelRef.current;
+    if (!ch) return;
+    await ch.track({
+      name: playerName,
+      driverId: extra.driverId ?? driverId,
+      isHost,
+      trackId: isHost ? (extra.trackId ?? trackId) : undefined,
+    });
+  }
+
+  function broadcastStart() {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.send({ type: "broadcast", event: "start", payload: { trackId } });
+    setResult(null);
+    setScreen("racing");
+  }
+
+  function genCode() {
+    return Math.random().toString(36).slice(2, 7).toUpperCase();
+  }
+
+  // Cleanup channel when component unmounts
+  useEffect(() => {
+    return () => { leaveRoom(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ============ Three.js race loop ============
   useEffect(() => {
     if (screen !== "racing") return;
