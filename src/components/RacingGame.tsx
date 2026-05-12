@@ -186,18 +186,23 @@ export default function RacingGame() {
     channelRef.current = ch;
 
     ch.on("presence", { event: "sync" }, () => {
-      const state = ch.presenceState() as Record<string, Array<{ name: string; driverId: string; isHost: boolean; trackId?: string }>>;
+      const state = ch.presenceState() as Record<string, Array<{ name: string; driverId: string; isHost: boolean; trackId?: string; laps?: 3 | 5 | 10 }>>;
       const players: LobbyPlayer[] = [];
       let hostTrackId: string | undefined;
+      let hostLaps: 3 | 5 | 10 | undefined;
       for (const [pid, metas] of Object.entries(state)) {
         const meta = metas[0];
         if (!meta) continue;
         players.push({ id: pid, name: meta.name, driverId: meta.driverId, isHost: !!meta.isHost });
-        if (meta.isHost && meta.trackId) hostTrackId = meta.trackId;
+        if (meta.isHost) {
+          if (meta.trackId) hostTrackId = meta.trackId;
+          if (meta.laps) hostLaps = meta.laps;
+        }
       }
       players.sort((a, b) => (a.isHost === b.isHost ? a.name.localeCompare(b.name) : a.isHost ? -1 : 1));
       setLobbyPlayers(players);
       if (!asHost && hostTrackId) setTrackId(hostTrackId);
+      if (!asHost && hostLaps) setLapsChoice(hostLaps);
     });
 
     ch.on("broadcast", { event: "start" }, () => {
@@ -222,12 +227,13 @@ export default function RacingGame() {
           driverId: initialDriverId,
           isHost: asHost,
           trackId: asHost ? initialTrackId : undefined,
+          laps: asHost ? lapsChoice : undefined,
         });
       }
     });
   }
 
-  async function updatePresence(extra: { driverId?: string; trackId?: string }) {
+  async function updatePresence(extra: { driverId?: string; trackId?: string; laps?: 3 | 5 | 10 }) {
     const ch = channelRef.current;
     if (!ch) return;
     await ch.track({
@@ -235,6 +241,7 @@ export default function RacingGame() {
       driverId: extra.driverId ?? driverId,
       isHost,
       trackId: isHost ? (extra.trackId ?? trackId) : undefined,
+      laps: isHost ? (extra.laps ?? lapsChoice) : undefined,
     });
   }
 
