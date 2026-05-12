@@ -721,7 +721,7 @@ export default function RacingGame() {
 
       // ---------- AI ----------
       const cLen = curveLength(curve);
-      ais.forEach((ai) => {
+      if (!isMulti) ais.forEach((ai) => {
         ai.t += (ai.speed * dt) / cLen;
         if (ai.t >= 1) ai.t -= 1;
         const ap = curve.getPointAt(ai.t);
@@ -751,14 +751,73 @@ export default function RacingGame() {
         }
       });
 
+      // ---------- Remote multiplayer cars ----------
+      if (isMulti) {
+        const nowMs = performance.now();
+        const stale: string[] = [];
+        remotesRef.current.forEach((rp, id) => {
+          if (nowMs - rp.lastUpdate > 8000) { stale.push(id); return; }
+          const car = ensureRemoteCar(rp);
+          // Smooth interpolation toward last received pose
+          car.group.position.x += (rp.x - car.group.position.x) * Math.min(1, dt * 12);
+          car.group.position.z += (rp.z - car.group.position.z) * Math.min(1, dt * 12);
+          // shortest-arc heading lerp
+          let dh = rp.heading - car.group.rotation.y;
+          while (dh > Math.PI) dh -= Math.PI * 2;
+          while (dh < -Math.PI) dh += Math.PI * 2;
+          car.group.rotation.y += dh * Math.min(1, dt * 12);
+          car.wheels.forEach((w) => (w.rotation.x += (rp.speed * dt) / 0.36));
+
+          // Hitbox vs player
+          const ddx = carPos.x - car.group.position.x;
+          const ddz = carPos.z - car.group.position.z;
+          const dSq = ddx * ddx + ddz * ddz;
+          if (dSq < 2.5 * 2.5) {
+            const len = Math.sqrt(dSq) || 1;
+            const nx = ddx / len, nz = ddz / len;
+            const overlap = 2.5 - len;
+            carPos.x += nx * overlap;
+            carPos.z += nz * overlap;
+            speed *= 0.78;
+          }
+        });
+        stale.forEach((id) => { remotesRef.current.delete(id); disposeRemoteCar(id); });
+
+        // Broadcast our pose ~15 Hz
+        if (channelRef.current && now - lastBroadcast > 65) {
+          lastBroadcast = now;
+          channelRef.current.send({
+            type: "broadcast",
+            event: "pos",
+            payload: {
+              id: playerIdRef.current,
+              name: playerName,
+              driverId: driver.id,
+              x: carPos.x,
+              z: carPos.z,
+              heading,
+              speed,
+              progress: raceProgress,
+              lastUpdate: 0,
+            } as RemotePlayer,
+          });
+        }
+      }
+
       // Position calc — sort all cars by total progress
       let position = 1;
       const playerLapFrac = raceProgress % 1;
-      ais.forEach((ai) => {
-        const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
-        const aiProg = aiLapEst + ai.t;
-        if (aiProg > raceProgress) position++;
-      });
+      if (isMulti) {
+        remotesRef.current.forEach((rp) => {
+          if (rp.progress > raceProgress) position++;
+        });
+      } else {
+        ais.forEach((ai) => {
+          const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+          const aiProg = aiLapEst + ai.t;
+          if (aiProg > raceProgress) position++;
+        });
+      }
 
       // ---------- Camera ----------
       let camWorld: THREE.Vector3;
