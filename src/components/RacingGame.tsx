@@ -1063,10 +1063,11 @@ function curveLength(curve: THREE.CatmullRomCurve3) {
 }
 
 // ---------------- UI Subcomponents ----------------
-function MainMenu({ career, onQuick, onCareer, onReset }: {
+function MainMenu({ career, onQuick, onCareer, onMulti, onReset }: {
   career: CareerSave | null;
   onQuick: () => void;
   onCareer: () => void;
+  onMulti: () => void;
   onReset: () => void;
 }) {
   return (
@@ -1084,6 +1085,9 @@ function MainMenu({ career, onQuick, onCareer, onReset }: {
         </button>
         <button onClick={onCareer} className="px-6 py-4 bg-red-600 hover:bg-red-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]">
           Career Mode
+        </button>
+        <button onClick={onMulti} className="px-6 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(0,80,220,0.45)]">
+          Multiplayer
         </button>
         {career && (
           <div className="mt-4 p-3 border border-white/10 bg-black/30 text-xs">
