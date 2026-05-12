@@ -135,6 +135,7 @@ export default function RacingGame() {
   const [mode, setMode] = useState<Mode>("quick");
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
+  const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
