@@ -135,6 +135,7 @@ export default function RacingGame() {
   const [mode, setMode] = useState<Mode>("quick");
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
+  const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
@@ -185,18 +186,23 @@ export default function RacingGame() {
     channelRef.current = ch;
 
     ch.on("presence", { event: "sync" }, () => {
-      const state = ch.presenceState() as Record<string, Array<{ name: string; driverId: string; isHost: boolean; trackId?: string }>>;
+      const state = ch.presenceState() as Record<string, Array<{ name: string; driverId: string; isHost: boolean; trackId?: string; laps?: 3 | 5 | 10 }>>;
       const players: LobbyPlayer[] = [];
       let hostTrackId: string | undefined;
+      let hostLaps: 3 | 5 | 10 | undefined;
       for (const [pid, metas] of Object.entries(state)) {
         const meta = metas[0];
         if (!meta) continue;
         players.push({ id: pid, name: meta.name, driverId: meta.driverId, isHost: !!meta.isHost });
-        if (meta.isHost && meta.trackId) hostTrackId = meta.trackId;
+        if (meta.isHost) {
+          if (meta.trackId) hostTrackId = meta.trackId;
+          if (meta.laps) hostLaps = meta.laps;
+        }
       }
       players.sort((a, b) => (a.isHost === b.isHost ? a.name.localeCompare(b.name) : a.isHost ? -1 : 1));
       setLobbyPlayers(players);
       if (!asHost && hostTrackId) setTrackId(hostTrackId);
+      if (!asHost && hostLaps) setLapsChoice(hostLaps);
     });
 
     ch.on("broadcast", { event: "start" }, () => {
@@ -221,12 +227,13 @@ export default function RacingGame() {
           driverId: initialDriverId,
           isHost: asHost,
           trackId: asHost ? initialTrackId : undefined,
+          laps: asHost ? lapsChoice : undefined,
         });
       }
     });
   }
 
-  async function updatePresence(extra: { driverId?: string; trackId?: string }) {
+  async function updatePresence(extra: { driverId?: string; trackId?: string; laps?: 3 | 5 | 10 }) {
     const ch = channelRef.current;
     if (!ch) return;
     await ch.track({
@@ -234,6 +241,7 @@ export default function RacingGame() {
       driverId: extra.driverId ?? driverId,
       isHost,
       trackId: isHost ? (extra.trackId ?? trackId) : undefined,
+      laps: isHost ? (extra.laps ?? lapsChoice) : undefined,
     });
   }
 
@@ -587,7 +595,7 @@ export default function RacingGame() {
     const carPos = new THREE.Vector3().copy(player.group.position);
     let steering = 0;
     let lap = 1;
-    const totalLaps = track.laps;
+    const totalLaps = lapsChoice;
     let lapStart = performance.now();
     let bestLap = 0;
     let prevT = 0;
@@ -980,6 +988,8 @@ export default function RacingGame() {
           trackId={trackId}
           career={career}
           mode={mode}
+          lapsChoice={lapsChoice}
+          onPickLaps={(n) => { setLapsChoice(n); if (mode === "multi" && isHost) updatePresence({ laps: n }); }}
           onPick={(id) => { setTrackId(id); if (mode === "multi" && isHost) updatePresence({ trackId: id }); }}
           onBack={() => setScreen("driver")}
           onStart={() => {
@@ -995,6 +1005,8 @@ export default function RacingGame() {
           isHost={isHost}
           players={lobbyPlayers}
           track={track}
+          lapsChoice={lapsChoice}
+          onPickLaps={(n) => { setLapsChoice(n); if (isHost) updatePresence({ laps: n }); }}
           onChangeTrack={() => setScreen("track")}
           onChangeDriver={() => setScreen("driver")}
           onStart={broadcastStart}
@@ -1206,11 +1218,13 @@ function MultiplayerEntry({ playerName, setPlayerName, onCreate, onJoin, onBack 
   );
 }
 
-function Lobby({ roomCode, isHost, players, track, onChangeTrack, onChangeDriver, onStart, onLeave }: {
+function Lobby({ roomCode, isHost, players, track, lapsChoice, onPickLaps, onChangeTrack, onChangeDriver, onStart, onLeave }: {
   roomCode: string;
   isHost: boolean;
   players: LobbyPlayer[];
   track: TrackDef;
+  lapsChoice: 3 | 5 | 10;
+  onPickLaps: (n: 3 | 5 | 10) => void;
   onChangeTrack: () => void;
   onChangeDriver: () => void;
   onStart: () => void;
@@ -1236,11 +1250,27 @@ function Lobby({ roomCode, isHost, players, track, onChangeTrack, onChangeDriver
         <div className="mb-6 p-4 border border-white/15 bg-black/40 flex items-center justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-white/50">Track</div>
-            <div className="text-xl font-bold">{track.name} <span className="text-white/40 text-sm font-normal">• {track.country} • {track.laps} laps</span></div>
+            <div className="text-xl font-bold">{track.name} <span className="text-white/40 text-sm font-normal">• {track.country} • {lapsChoice} laps</span></div>
           </div>
           {isHost && (
             <button onClick={onChangeTrack} className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest">Change</button>
           )}
+        </div>
+
+        <div className="mb-6 p-4 border border-white/15 bg-black/40">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">Race length</div>
+          <div className="flex gap-2">
+            {([3, 5, 10] as const).map((n) => (
+              <button
+                key={n}
+                onClick={() => isHost && onPickLaps(n)}
+                disabled={!isHost}
+                className={`flex-1 py-2 border-2 font-bold uppercase tracking-widest text-sm ${lapsChoice === n ? "border-red-500 bg-red-500/15 text-white" : "border-white/20 bg-black/40 text-white/70"} ${isHost ? "hover:border-white/40" : "opacity-70 cursor-not-allowed"}`}
+              >
+                {n} Laps
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mb-6 p-4 border border-white/15 bg-black/40">
@@ -1280,10 +1310,12 @@ function Lobby({ roomCode, isHost, players, track, onChangeTrack, onChangeDriver
   );
 }
 
-function TrackSelect({ trackId, career, mode, onPick, onBack, onStart }: {
+function TrackSelect({ trackId, career, mode, lapsChoice, onPickLaps, onPick, onBack, onStart }: {
   trackId: string;
   career: CareerSave | null;
   mode: Mode;
+  lapsChoice: 3 | 5 | 10;
+  onPickLaps: (n: 3 | 5 | 10) => void;
   onPick: (id: string) => void;
   onBack: () => void;
   onStart: () => void;
@@ -1294,6 +1326,21 @@ function TrackSelect({ trackId, career, mode, onPick, onBack, onStart }: {
         <button onClick={onBack} className="text-white/60 hover:text-white text-xs uppercase tracking-widest mb-4">← Back</button>
         <h2 className="text-3xl sm:text-4xl font-black mb-1">Choose Track</h2>
         <p className="text-white/50 text-sm mb-6 uppercase tracking-widest">{mode === "career" ? "Career round" : "Quick race"}</p>
+
+        <div className="mb-6">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">Race length</div>
+          <div className="flex gap-2">
+            {([3, 5, 10] as const).map((n) => (
+              <button
+                key={n}
+                onClick={() => onPickLaps(n)}
+                className={`flex-1 py-2 border-2 font-bold uppercase tracking-widest text-sm ${lapsChoice === n ? "border-red-500 bg-red-500/15 text-white" : "border-white/20 bg-black/40 text-white/70 hover:border-white/40"}`}
+              >
+                {n} Laps
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {TRACKS.map((t) => {
