@@ -1218,11 +1218,13 @@ function MultiplayerEntry({ playerName, setPlayerName, onCreate, onJoin, onBack 
   );
 }
 
-function Lobby({ roomCode, isHost, players, track, onChangeTrack, onChangeDriver, onStart, onLeave }: {
+function Lobby({ roomCode, isHost, players, track, lapsChoice, onPickLaps, onChangeTrack, onChangeDriver, onStart, onLeave }: {
   roomCode: string;
   isHost: boolean;
   players: LobbyPlayer[];
   track: TrackDef;
+  lapsChoice: 3 | 5 | 10;
+  onPickLaps: (n: 3 | 5 | 10) => void;
   onChangeTrack: () => void;
   onChangeDriver: () => void;
   onStart: () => void;
@@ -1248,11 +1250,27 @@ function Lobby({ roomCode, isHost, players, track, onChangeTrack, onChangeDriver
         <div className="mb-6 p-4 border border-white/15 bg-black/40 flex items-center justify-between">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-white/50">Track</div>
-            <div className="text-xl font-bold">{track.name} <span className="text-white/40 text-sm font-normal">• {track.country} • {track.laps} laps</span></div>
+            <div className="text-xl font-bold">{track.name} <span className="text-white/40 text-sm font-normal">• {track.country} • {lapsChoice} laps</span></div>
           </div>
           {isHost && (
             <button onClick={onChangeTrack} className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest">Change</button>
           )}
+        </div>
+
+        <div className="mb-6 p-4 border border-white/15 bg-black/40">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">Race length</div>
+          <div className="flex gap-2">
+            {([3, 5, 10] as const).map((n) => (
+              <button
+                key={n}
+                onClick={() => isHost && onPickLaps(n)}
+                disabled={!isHost}
+                className={`flex-1 py-2 border-2 font-bold uppercase tracking-widest text-sm ${lapsChoice === n ? "border-red-500 bg-red-500/15 text-white" : "border-white/20 bg-black/40 text-white/70"} ${isHost ? "hover:border-white/40" : "opacity-70 cursor-not-allowed"}`}
+              >
+                {n} Laps
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mb-6 p-4 border border-white/15 bg-black/40">
