@@ -588,7 +588,7 @@ export default function RacingGame() {
     const carPos = new THREE.Vector3().copy(player.group.position);
     let steering = 0;
     let lap = 1;
-    const totalLaps = track.laps;
+    const totalLaps = lapsChoice;
     let lapStart = performance.now();
     let bestLap = 0;
     let prevT = 0;
