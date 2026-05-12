@@ -533,14 +533,39 @@ export default function RacingGame() {
     const MAX_SPEED_PREVIEW = 78;
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
     const ais: (AI & { driver: Driver; offset: number })[] = [];
-    const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
-    otherDrivers.forEach((d, i) => {
-      const c = buildCar(d);
-      scene.add(c.group);
-      const tStart = -0.004 - i * 0.005; // staggered grid behind player
-      const lateral = (i % 2 === 0 ? 1 : -1) * (2 + (i % 4)); // weave across track
-      ais.push({ car: c, t: (tStart + 1) % 1, speed: AI_SPEED, driver: d, offset: lateral });
-    });
+    const isMulti = mode === "multi";
+    if (!isMulti) {
+      const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
+      otherDrivers.forEach((d, i) => {
+        const c = buildCar(d);
+        scene.add(c.group);
+        const tStart = -0.004 - i * 0.005;
+        const lateral = (i % 2 === 0 ? 1 : -1) * (2 + (i % 4));
+        ais.push({ car: c, t: (tStart + 1) % 1, speed: AI_SPEED, driver: d, offset: lateral });
+      });
+    }
+
+    // Remote multiplayer cars (mesh per remote player id)
+    const remoteCars = new Map<string, ReturnType<typeof buildCar>>();
+    function ensureRemoteCar(p: RemotePlayer) {
+      let car = remoteCars.get(p.id);
+      if (!car) {
+        const drv = DRIVERS.find((d) => d.id === p.driverId) ?? DRIVERS[0];
+        car = buildCar(drv);
+        scene.add(car.group);
+        remoteCars.set(p.id, car);
+      }
+      return car;
+    }
+    function disposeRemoteCar(id: string) {
+      const car = remoteCars.get(id);
+      if (car) {
+        scene.remove(car.group);
+        remoteCars.delete(id);
+      }
+    }
+
+    let lastBroadcast = 0;
 
     // ---------- Input ----------
     const keys: Record<string, boolean> = {};
