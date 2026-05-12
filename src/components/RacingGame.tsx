@@ -931,16 +931,47 @@ export default function RacingGame() {
           career={career}
           onQuick={() => { setMode("quick"); setScreen("driver"); }}
           onCareer={() => { setMode("career"); setScreen("driver"); }}
+          onMulti={() => { setMode("multi"); setScreen("multi"); }}
           onReset={() => { try { localStorage.removeItem(SAVE_KEY); } catch {}; setCareer(null); }}
+        />
+      )}
+
+      {screen === "multi" && (
+        <MultiplayerEntry
+          playerName={playerName}
+          setPlayerName={setPlayerName}
+          onBack={() => { leaveRoom(); setScreen("menu"); }}
+          onCreate={() => {
+            const code = genCode();
+            setRoomCode(code);
+            setIsHost(true);
+            joinChannel(code, true, driverId, trackId);
+            setScreen("driver");
+          }}
+          onJoin={(code) => {
+            const c = code.trim().toUpperCase();
+            if (c.length < 3) return;
+            setRoomCode(c);
+            setIsHost(false);
+            joinChannel(c, false, driverId, trackId);
+            setScreen("driver");
+          }}
         />
       )}
 
       {screen === "driver" && (
         <DriverSelect
           driverId={driverId}
-          onPick={(id) => setDriverId(id)}
+          onPick={(id) => { setDriverId(id); if (mode === "multi") updatePresence({ driverId: id }); }}
           onBack={() => setScreen("menu")}
-          onNext={() => setScreen("track")}
+          onNext={() => {
+            if (mode === "multi") {
+              if (isHost) setScreen("track");
+              else setScreen("lobby");
+            } else {
+              setScreen("track");
+            }
+          }}
         />
       )}
 
@@ -949,9 +980,25 @@ export default function RacingGame() {
           trackId={trackId}
           career={career}
           mode={mode}
-          onPick={(id) => setTrackId(id)}
+          onPick={(id) => { setTrackId(id); if (mode === "multi" && isHost) updatePresence({ trackId: id }); }}
           onBack={() => setScreen("driver")}
-          onStart={() => { setResult(null); setScreen("racing"); }}
+          onStart={() => {
+            if (mode === "multi") setScreen("lobby");
+            else { setResult(null); setScreen("racing"); }
+          }}
+        />
+      )}
+
+      {screen === "lobby" && (
+        <Lobby
+          roomCode={roomCode}
+          isHost={isHost}
+          players={lobbyPlayers}
+          track={track}
+          onChangeTrack={() => setScreen("track")}
+          onChangeDriver={() => setScreen("driver")}
+          onStart={broadcastStart}
+          onLeave={() => { leaveRoom(); setScreen("menu"); }}
         />
       )}
 
