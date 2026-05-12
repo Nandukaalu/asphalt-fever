@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { supabase } from "@/integrations/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -27,7 +29,26 @@ type CareerSave = {
   rounds: { trackId: string; order: string[] }[]; // finishing order per round
 };
 
-type Mode = "quick" | "career";
+type Mode = "quick" | "career" | "multi";
+
+type RemotePlayer = {
+  id: string;
+  name: string;
+  driverId: string;
+  x: number;
+  z: number;
+  heading: number;
+  speed: number;
+  progress: number;
+  lastUpdate: number;
+};
+
+type LobbyPlayer = {
+  id: string;
+  name: string;
+  driverId: string;
+  isHost: boolean;
+};
 
 // ---------------- Data ----------------
 const DRIVERS: Driver[] = [
