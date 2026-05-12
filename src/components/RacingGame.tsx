@@ -870,10 +870,16 @@ export default function RacingGame() {
         const standingsList: { id: string; prog: number }[] = [
           { id: driver.id, prog: raceProgress + 0.0001 },
         ];
-        ais.forEach((ai) => {
-          const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
-          standingsList.push({ id: ai.driver.id, prog: aiLapEst + ai.t });
-        });
+        if (isMulti) {
+          remotesRef.current.forEach((rp) => {
+            standingsList.push({ id: rp.driverId, prog: rp.progress });
+          });
+        } else {
+          ais.forEach((ai) => {
+            const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+            standingsList.push({ id: ai.driver.id, prog: aiLapEst + ai.t });
+          });
+        }
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
         setResult({ position, bestLap, points });
