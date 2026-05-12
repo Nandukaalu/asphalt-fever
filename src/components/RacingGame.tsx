@@ -988,6 +988,8 @@ export default function RacingGame() {
           trackId={trackId}
           career={career}
           mode={mode}
+          lapsChoice={lapsChoice}
+          onPickLaps={(n) => { setLapsChoice(n); if (mode === "multi" && isHost) updatePresence({ laps: n }); }}
           onPick={(id) => { setTrackId(id); if (mode === "multi" && isHost) updatePresence({ trackId: id }); }}
           onBack={() => setScreen("driver")}
           onStart={() => {
