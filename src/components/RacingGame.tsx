@@ -1005,6 +1005,8 @@ export default function RacingGame() {
           isHost={isHost}
           players={lobbyPlayers}
           track={track}
+          lapsChoice={lapsChoice}
+          onPickLaps={(n) => { setLapsChoice(n); if (isHost) updatePresence({ laps: n }); }}
           onChangeTrack={() => setScreen("track")}
           onChangeDriver={() => setScreen("driver")}
           onStart={broadcastStart}
