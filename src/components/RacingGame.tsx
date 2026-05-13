@@ -1439,11 +1439,15 @@ function Lobby({ roomCode, isHost, players, track, lapsChoice, onPickLaps, onCha
   );
 }
 
-function TrackSelect({ trackId, career, mode, lapsChoice, onPickLaps, onPick, onBack, onStart }: {
+function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTracks, onCreate, onDeleteCustom, onPickLaps, onPick, onBack, onStart }: {
   trackId: string;
   career: CareerSave | null;
   mode: Mode;
   lapsChoice: 3 | 5 | 10;
+  allTracks: TrackDef[];
+  customTracks: TrackDef[];
+  onCreate: () => void;
+  onDeleteCustom: (id: string) => void;
   onPickLaps: (n: 3 | 5 | 10) => void;
   onPick: (id: string) => void;
   onBack: () => void;
@@ -1472,9 +1476,10 @@ function TrackSelect({ trackId, career, mode, lapsChoice, onPickLaps, onPick, on
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {TRACKS.map((t) => {
+          {allTracks.map((t) => {
             const selected = t.id === trackId;
             const result = career?.completed[t.id];
+            const isCustom = customTracks.some((c) => c.id === t.id);
             return (
               <button
                 key={t.id}
@@ -1485,15 +1490,33 @@ function TrackSelect({ trackId, career, mode, lapsChoice, onPickLaps, onPick, on
                   <div className="font-black text-lg">{t.name}</div>
                   <div className="text-white/50 text-xs uppercase">{t.country}</div>
                 </div>
-                <div className="text-white/50 text-xs mt-1">{t.laps} laps</div>
+                <div className="text-white/50 text-xs mt-1">
+                  {t.laps} laps {isCustom && <span className="text-blue-400 ml-1">• Custom</span>}
+                </div>
                 {result && (
                   <div className="mt-2 text-xs text-red-400 font-mono">
                     Best P{result.position} • {result.bestLap.toFixed(2)}s • +{result.points}pts
                   </div>
                 )}
+                {isCustom && (
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); onDeleteCustom(t.id); }}
+                    className="mt-2 inline-block text-[10px] text-white/40 hover:text-red-400 underline"
+                  >
+                    Delete
+                  </span>
+                )}
               </button>
             );
           })}
+          <button
+            onClick={onCreate}
+            className="p-4 border-2 border-dashed border-blue-400/50 hover:border-blue-400 bg-blue-500/5 text-blue-300 text-left"
+          >
+            <div className="font-black text-lg">+ Create a Track</div>
+            <div className="text-xs mt-1 opacity-70">Design your own circuit</div>
+          </button>
         </div>
 
         <button onClick={onStart} className="mt-8 w-full sm:w-auto px-10 py-4 bg-red-600 hover:bg-red-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]">
