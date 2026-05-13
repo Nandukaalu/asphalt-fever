@@ -353,15 +353,40 @@ export default function RacingGame() {
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x9ecbff);
-    scene.fog = new THREE.Fog(0x9ecbff, 250, 1100);
+    // Cyberpunk sunset → deep night gradient sky
+    const skyCanvas = document.createElement("canvas");
+    skyCanvas.width = 8; skyCanvas.height = 512;
+    const sctx0 = skyCanvas.getContext("2d")!;
+    const grd = sctx0.createLinearGradient(0, 0, 0, 512);
+    grd.addColorStop(0.00, "#05030f");
+    grd.addColorStop(0.35, "#1a0a3a");
+    grd.addColorStop(0.62, "#5b1a6a");
+    grd.addColorStop(0.78, "#d63b6a");
+    grd.addColorStop(0.90, "#ff8a3d");
+    grd.addColorStop(1.00, "#ffd089");
+    sctx0.fillStyle = grd;
+    sctx0.fillRect(0, 0, 8, 512);
+    // Stars
+    for (let i = 0; i < 90; i++) {
+      const y = Math.random() * 200;
+      sctx0.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.7})`;
+      sctx0.fillRect(Math.random() * 8, y, 1, 1);
+    }
+    const skyTex = new THREE.CanvasTexture(skyCanvas);
+    skyTex.colorSpace = THREE.SRGBColorSpace;
+    const skyDome = new THREE.Mesh(
+      new THREE.SphereGeometry(2000, 32, 16),
+      new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false }),
+    );
+    scene.add(skyDome);
+    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.0018);
 
-    const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 2500);
+    const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 3000);
 
-    const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x445566, 0.95);
+    const hemi = new THREE.HemisphereLight(0xff6ad5, 0x1a0a3a, 0.55);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xfff1c4, 1.5);
-    sun.position.set(160, 240, 100);
+    const sun = new THREE.DirectionalLight(0xffb070, 1.2);
+    sun.position.set(280, 180, -240);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left = -300;
@@ -370,6 +395,13 @@ export default function RacingGame() {
     sun.shadow.camera.bottom = -300;
     sun.shadow.camera.far = 800;
     scene.add(sun);
+    // Cool rim light for cyberpunk vibe
+    const rim = new THREE.DirectionalLight(0x22d3ee, 0.5);
+    rim.position.set(-200, 120, 200);
+    scene.add(rim);
+
+    // ---------- Futuristic environment (updaters tick each frame) ----------
+    const envUpdaters: ((t: number) => void)[] = [];
 
     // ---------- Track ----------
     const waypoints = track.waypoints.map(([x, z]) => new THREE.Vector3(x, 0, z));
@@ -476,10 +508,29 @@ export default function RacingGame() {
     scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lTop), stripeMat));
     scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rTop), stripeMat));
 
-    // Grass
+    // Dark reflective ground with neon hex/grid pattern
+    const groundCanvas = document.createElement("canvas");
+    groundCanvas.width = 512; groundCanvas.height = 512;
+    const gctx = groundCanvas.getContext("2d")!;
+    gctx.fillStyle = "#0a0612";
+    gctx.fillRect(0, 0, 512, 512);
+    gctx.strokeStyle = "rgba(34,211,238,0.35)";
+    gctx.lineWidth = 1;
+    for (let i = 0; i <= 16; i++) {
+      const p = (i / 16) * 512;
+      gctx.beginPath(); gctx.moveTo(p, 0); gctx.lineTo(p, 512); gctx.stroke();
+      gctx.beginPath(); gctx.moveTo(0, p); gctx.lineTo(512, p); gctx.stroke();
+    }
+    gctx.strokeStyle = "rgba(236,72,153,0.18)";
+    for (let i = 0; i < 64; i++) {
+      gctx.strokeRect(Math.random() * 480, Math.random() * 480, 8 + Math.random() * 24, 8 + Math.random() * 24);
+    }
+    const groundTex = new THREE.CanvasTexture(groundCanvas);
+    groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
+    groundTex.repeat.set(40, 40);
     const grass = new THREE.Mesh(
       new THREE.PlaneGeometry(3000, 3000),
-      new THREE.MeshStandardMaterial({ color: 0x3a7a3a, roughness: 1 })
+      new THREE.MeshStandardMaterial({ map: groundTex, color: 0x14091e, roughness: 0.6, metalness: 0.3 }),
     );
     grass.rotation.x = -Math.PI / 2;
     grass.receiveShadow = true;
@@ -501,8 +552,8 @@ export default function RacingGame() {
     startLine.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
     scene.add(startLine);
 
-    // Grandstands
-    const standMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.9 });
+    // Grandstands (dark with neon edge)
+    const standMat = new THREE.MeshStandardMaterial({ color: 0x1a1428, roughness: 0.6, metalness: 0.4, emissive: 0x22d3ee, emissiveIntensity: 0.08 });
     for (let i = 0; i < 14; i++) {
       const t = i / 14;
       const p = curve.getPointAt(t);
@@ -516,20 +567,182 @@ export default function RacingGame() {
       scene.add(stand);
     }
 
-    // Trees
-    const treeMat = new THREE.MeshStandardMaterial({ color: 0x205020 });
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a2f1a });
-    for (let i = 0; i < 100; i++) {
+    // ===== Futuristic city skyline (instanced for perf) =====
+    const NEON_COLORS = [0xff1493, 0x22d3ee, 0xa855f7, 0xff6a1a, 0x22c55e, 0xffd166];
+    const bldGeo = new THREE.BoxGeometry(1, 1, 1);
+    const bldMat = new THREE.MeshStandardMaterial({ color: 0x0c0820, roughness: 0.5, metalness: 0.6 });
+    const BLD_COUNT = 220;
+    const buildings = new THREE.InstancedMesh(bldGeo, bldMat, BLD_COUNT);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < BLD_COUNT; i++) {
+      const ring = i < 140 ? 0 : 1;
+      const a = (i / BLD_COUNT) * Math.PI * 2 + Math.random() * 0.2;
+      const r = ring === 0 ? 520 + Math.random() * 220 : 880 + Math.random() * 380;
+      const w = 18 + Math.random() * 38;
+      const d = 18 + Math.random() * 38;
+      const h = 40 + Math.random() * (ring === 0 ? 140 : 220);
+      dummy.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r);
+      dummy.rotation.y = Math.random() * Math.PI;
+      dummy.scale.set(w, h, d);
+      dummy.updateMatrix();
+      buildings.setMatrixAt(i, dummy.matrix);
+    }
+    scene.add(buildings);
+
+    // Neon "window" lights — instanced points in front of skyline
+    const winGeo = new THREE.BufferGeometry();
+    const WIN_COUNT = 1800;
+    const winPos = new Float32Array(WIN_COUNT * 3);
+    const winCol = new Float32Array(WIN_COUNT * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < WIN_COUNT; i++) {
+      const ring = Math.random() < 0.6 ? 0 : 1;
       const a = Math.random() * Math.PI * 2;
-      const r = 350 + Math.random() * 500;
+      const r = ring === 0 ? 520 + Math.random() * 240 : 880 + Math.random() * 380;
+      const y = 8 + Math.random() * (ring === 0 ? 140 : 220);
+      winPos[i * 3] = Math.cos(a) * r;
+      winPos[i * 3 + 1] = y;
+      winPos[i * 3 + 2] = Math.sin(a) * r;
+      c.setHex(NEON_COLORS[(Math.random() * NEON_COLORS.length) | 0]);
+      winCol[i * 3] = c.r; winCol[i * 3 + 1] = c.g; winCol[i * 3 + 2] = c.b;
+    }
+    winGeo.setAttribute("position", new THREE.BufferAttribute(winPos, 3));
+    winGeo.setAttribute("color", new THREE.BufferAttribute(winCol, 3));
+    const windows = new THREE.Points(
+      winGeo,
+      new THREE.PointsMaterial({ size: 2.4, vertexColors: true, transparent: true, opacity: 0.9, sizeAttenuation: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+    );
+    scene.add(windows);
+    envUpdaters.push((t) => {
+      const m = windows.material as THREE.PointsMaterial;
+      m.opacity = 0.7 + Math.sin(t * 0.003) * 0.2;
+    });
+
+    // ===== Distant mountain silhouette =====
+    const mtnShape = new THREE.Shape();
+    mtnShape.moveTo(-1500, 0);
+    let mx = -1500;
+    while (mx < 1500) {
+      const step = 60 + Math.random() * 120;
+      mx += step;
+      mtnShape.lineTo(mx, 80 + Math.random() * 220);
+      mx += step;
+      mtnShape.lineTo(mx, 40 + Math.random() * 160);
+    }
+    mtnShape.lineTo(1500, 0);
+    mtnShape.lineTo(-1500, 0);
+    const mtnGeo = new THREE.ShapeGeometry(mtnShape);
+    const mtnMat = new THREE.MeshBasicMaterial({ color: 0x140822, fog: false });
+    for (let i = 0; i < 4; i++) {
+      const m = new THREE.Mesh(mtnGeo, mtnMat);
+      const a = (i / 4) * Math.PI * 2;
+      m.position.set(Math.cos(a) * 1700, 0, Math.sin(a) * 1700);
+      m.lookAt(0, 0, 0);
+      scene.add(m);
+    }
+
+    // ===== Holographic billboards around the track =====
+    const bbGeo = new THREE.PlaneGeometry(28, 14);
+    for (let i = 0; i < 8; i++) {
+      const t = (i / 8 + 0.04) % 1;
+      const p = curve.getPointAt(t);
+      const tg = curve.getTangentAt(t).normalize();
+      const n = new THREE.Vector3(-tg.z, 0, tg.x);
+      const pos = p.clone().addScaledVector(n, TRACK_WIDTH / 2 + 70);
+      const color = NEON_COLORS[i % NEON_COLORS.length];
+      const bbMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+      const bb = new THREE.Mesh(bbGeo, bbMat);
+      bb.position.set(pos.x, 16, pos.z);
+      bb.lookAt(p.x, 16, p.z);
+      scene.add(bb);
+      // Support pylon
+      const pyl = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 16, 0.8),
+        new THREE.MeshStandardMaterial({ color: 0x111122, emissive: color, emissiveIntensity: 0.3 }),
+      );
+      pyl.position.set(pos.x, 8, pos.z);
+      scene.add(pyl);
+      const phase = Math.random() * Math.PI * 2;
+      envUpdaters.push((tt) => {
+        bbMat.opacity = 0.35 + (Math.sin(tt * 0.004 + phase) * 0.5 + 0.5) * 0.4;
+      });
+    }
+
+    // ===== Sci-fi pylons (replacing trees) — neon obelisks =====
+    const pylonGeo = new THREE.CylinderGeometry(0.6, 1.2, 14, 6);
+    for (let i = 0; i < 80; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 320 + Math.random() * 160;
       const x = Math.cos(a) * r;
       const z = Math.sin(a) * r;
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 3), trunkMat);
-      trunk.position.set(x, 1.5, z);
-      const leaves = new THREE.Mesh(new THREE.ConeGeometry(2.5, 6, 8), treeMat);
-      leaves.position.set(x, 5, z);
-      scene.add(trunk, leaves);
+      const col = NEON_COLORS[(Math.random() * NEON_COLORS.length) | 0];
+      const m = new THREE.Mesh(
+        pylonGeo,
+        new THREE.MeshStandardMaterial({ color: 0x0a0815, emissive: col, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.6 }),
+      );
+      m.position.set(x, 7, z);
+      scene.add(m);
     }
+
+    // ===== Flying drones / hover-cars =====
+    type Flyer = { mesh: THREE.Mesh; light: THREE.PointLight; r: number; y: number; speed: number; phase: number };
+    const flyers: Flyer[] = [];
+    const droneGeo = new THREE.SphereGeometry(1.4, 8, 6);
+    for (let i = 0; i < 14; i++) {
+      const col = NEON_COLORS[i % NEON_COLORS.length];
+      const mat = new THREE.MeshStandardMaterial({ color: 0x0a0a14, emissive: col, emissiveIntensity: 1.4 });
+      const m = new THREE.Mesh(droneGeo, mat);
+      const trail = new THREE.Mesh(
+        new THREE.BoxGeometry(8, 0.3, 0.3),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }),
+      );
+      m.add(trail);
+      trail.position.x = -5;
+      const r = 250 + Math.random() * 600;
+      const y = 30 + Math.random() * 90;
+      const speed = (0.0002 + Math.random() * 0.0006) * (Math.random() < 0.5 ? -1 : 1);
+      const phase = Math.random() * Math.PI * 2;
+      m.position.set(Math.cos(phase) * r, y, Math.sin(phase) * r);
+      scene.add(m);
+      flyers.push({ mesh: m, light: null as unknown as THREE.PointLight, r, y, speed, phase });
+    }
+    envUpdaters.push((tt) => {
+      for (const f of flyers) {
+        const ang = f.phase + tt * f.speed;
+        const x = Math.cos(ang) * f.r;
+        const z = Math.sin(ang) * f.r;
+        f.mesh.position.set(x, f.y + Math.sin(tt * 0.001 + f.phase) * 2, z);
+        // Face direction of travel
+        f.mesh.rotation.y = -ang + (f.speed > 0 ? Math.PI / 2 : -Math.PI / 2);
+      }
+    });
+
+    // ===== Atmospheric particles (floating embers / dust) =====
+    const partCount = 350;
+    const partGeo = new THREE.BufferGeometry();
+    const partPos = new Float32Array(partCount * 3);
+    for (let i = 0; i < partCount; i++) {
+      partPos[i * 3] = (Math.random() - 0.5) * 800;
+      partPos[i * 3 + 1] = Math.random() * 80;
+      partPos[i * 3 + 2] = (Math.random() - 0.5) * 800;
+    }
+    partGeo.setAttribute("position", new THREE.BufferAttribute(partPos, 3));
+    const particles = new THREE.Points(
+      partGeo,
+      new THREE.PointsMaterial({ size: 0.6, color: 0xff8a3d, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
+    );
+    scene.add(particles);
+    envUpdaters.push((tt) => {
+      const arr = partGeo.attributes.position.array as Float32Array;
+      for (let i = 1; i < arr.length; i += 3) {
+        arr[i] += 0.04;
+        if (arr[i] > 90) arr[i] = 0;
+      }
+      partGeo.attributes.position.needsUpdate = true;
+      particles.position.x = camera.position.x;
+      particles.position.z = camera.position.z;
+      void tt;
+    });
 
     // Cones (trackside obstacles with hitboxes)
     type Cone = { mesh: THREE.Mesh; pos: THREE.Vector3; alive: boolean };
@@ -744,6 +957,9 @@ export default function RacingGame() {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+
+      // Animate futuristic environment
+      for (let i = 0; i < envUpdaters.length; i++) envUpdaters[i](now);
 
       // ---------- Pre-race countdown: hold cars on the grid ----------
       const preRace = now < raceStartAt;
