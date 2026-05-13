@@ -1427,6 +1427,8 @@ export default function RacingGame() {
             </div>
           </div>
 
+          <Speedometer speed={hud.speed} gear={hud.gear} />
+
           <button
             onClick={() => setScreen("menu")}
             className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 bg-black/50 backdrop-blur text-white text-xs uppercase tracking-widest border border-white/20 hover:bg-black/70"
@@ -2074,6 +2076,48 @@ function TouchControls({ touchRef }: { touchRef: React.MutableRefObject<{ accel:
         <button {...bindHold("accel")} className="h-28 w-28 rounded-2xl bg-red-600/90 backdrop-blur border border-red-400 text-white font-black text-sm uppercase tracking-widest active:bg-red-500 shadow-[0_0_30px_rgba(220,0,0,0.5)] touch-none">
           Throttle
         </button>
+      </div>
+    </div>
+  );
+}
+function Speedometer({ speed, gear }: { speed: number; gear: number }) {
+  const max = 320;
+  const pct = Math.max(0, Math.min(1, speed / max));
+  const angle = pct * 270 - 135; // -135deg .. +135deg
+  const ringDeg = pct * 270;
+  return (
+    <div className="absolute top-28 right-4 z-10 select-none pointer-events-none">
+      <div className="relative w-32 h-32 sm:w-36 sm:h-36">
+        {/* Outer glow ring */}
+        <div
+          className="absolute inset-0 rounded-full transition-[background] duration-100"
+          style={{
+            background: `conic-gradient(from 225deg, #22d3ee 0deg, #ff1493 ${ringDeg * 0.5}deg, #ff6a1a ${ringDeg}deg, rgba(255,255,255,0.06) ${ringDeg}deg, rgba(255,255,255,0.06) 270deg, transparent 270deg)`,
+            filter: "drop-shadow(0 0 10px rgba(255,106,26,0.6))",
+            mask: "radial-gradient(circle, transparent 58%, #000 60%, #000 100%)",
+            WebkitMask: "radial-gradient(circle, transparent 58%, #000 60%, #000 100%)",
+          }}
+        />
+        {/* Inner face */}
+        <div className="absolute inset-3 rounded-full bg-black/70 backdrop-blur border border-white/10 shadow-[0_0_30px_rgba(34,211,238,0.25)_inset] flex flex-col items-center justify-center">
+          <div className="text-3xl sm:text-4xl font-black tabular-nums leading-none text-white drop-shadow-[0_0_8px_rgba(34,211,238,0.7)] transition-all">
+            {Math.round(speed)}
+          </div>
+          <div className="text-[9px] font-display uppercase tracking-[0.25em] text-cyan-300/80 mt-0.5">km/h</div>
+          <div className="mt-1 text-[9px] uppercase tracking-widest text-white/40">
+            Gear <span className="text-orange-400 font-bold">{gear}</span>
+          </div>
+        </div>
+        {/* Needle */}
+        <div
+          className="absolute left-1/2 top-1/2 origin-left h-0.5 w-[42%] -translate-y-1/2 rounded-full transition-transform duration-100"
+          style={{
+            transform: `translateY(-50%) rotate(${angle}deg)`,
+            background: "linear-gradient(90deg, transparent, #ff1493 60%, #ff6a1a)",
+            boxShadow: "0 0 8px #ff1493",
+          }}
+        />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#fff]" />
       </div>
     </div>
   );
