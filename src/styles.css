@@ -63,25 +63,36 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.13 0.02 260);
-  --foreground: oklch(0.98 0.01 90);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
+  /* Asphalt Fever – dark cinematic racing theme */
+  --background: oklch(0.10 0.02 265);
+  --foreground: oklch(0.97 0.01 90);
+  --card: oklch(0.14 0.025 265);
+  --card-foreground: oklch(0.97 0.01 90);
+  --popover: oklch(0.14 0.025 265);
+  --popover-foreground: oklch(0.97 0.01 90);
+  --primary: oklch(0.72 0.22 30);          /* neon ember orange */
+  --primary-foreground: oklch(0.10 0.02 265);
+  --secondary: oklch(0.22 0.04 265);
+  --secondary-foreground: oklch(0.97 0.01 90);
+  --muted: oklch(0.18 0.03 265);
+  --muted-foreground: oklch(0.70 0.02 260);
+  --accent: oklch(0.78 0.18 200);          /* neon cyan */
+  --accent-foreground: oklch(0.10 0.02 265);
+  --destructive: oklch(0.62 0.25 25);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --border: oklch(0.30 0.03 265 / 60%);
+  --input: oklch(0.22 0.04 265);
+  --ring: oklch(0.72 0.22 30);
+  --neon-orange: #ff6a1a;
+  --neon-cyan: #22d3ee;
+  --neon-magenta: #ec4899;
+  --gradient-hero: radial-gradient(ellipse at top, oklch(0.22 0.08 30 / 50%), transparent 60%),
+                   radial-gradient(ellipse at bottom, oklch(0.20 0.10 200 / 40%), transparent 60%),
+                   linear-gradient(180deg, oklch(0.08 0.02 265), oklch(0.10 0.02 265));
+  --gradient-primary: linear-gradient(135deg, #ff6a1a, #ec4899);
+  --gradient-accent: linear-gradient(135deg, #22d3ee, #6366f1);
+  --shadow-neon: 0 0 30px oklch(0.72 0.22 30 / 50%), 0 0 60px oklch(0.72 0.22 30 / 25%);
+  --shadow-cyan: 0 0 30px oklch(0.78 0.18 200 / 50%);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -140,5 +151,94 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: 'Rajdhani', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, .font-display {
+    font-family: 'Orbitron', 'Rajdhani', sans-serif;
+    letter-spacing: 0.02em;
   }
 }
+
+/* ---------- Racing utilities ---------- */
+@layer utilities {
+  .text-gradient-primary {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .text-gradient-accent {
+    background: var(--gradient-accent);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .bg-hero { background: var(--gradient-hero); }
+  .shadow-neon { box-shadow: var(--shadow-neon); }
+  .shadow-cyan { box-shadow: var(--shadow-cyan); }
+  .glass {
+    background: oklch(0.14 0.025 265 / 60%);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid oklch(1 0 0 / 8%);
+  }
+  .neon-border {
+    position: relative;
+    border: 1px solid transparent;
+    background:
+      linear-gradient(var(--card), var(--card)) padding-box,
+      var(--gradient-primary) border-box;
+  }
+  .speed-lines {
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 40px,
+      oklch(0.78 0.18 200 / 12%) 40px,
+      oklch(0.78 0.18 200 / 12%) 41px
+    );
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(oklch(1 0 0 / 4%) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(1 0 0 / 4%) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
+
+@keyframes float-up {
+  0% { transform: translateY(0); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translateY(-100vh); opacity: 0; }
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px oklch(0.72 0.22 30 / 40%); }
+  50% { box-shadow: 0 0 40px oklch(0.72 0.22 30 / 80%), 0 0 80px oklch(0.72 0.22 30 / 40%); }
+}
+@keyframes streak {
+  0% { transform: translateX(-100%); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateX(100vw); opacity: 0; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-pulse-glow { animation: pulse-glow 2.4s ease-in-out infinite; }
+.animate-streak { animation: streak 3s linear infinite; }
+.animate-slide-up { animation: slide-up 0.8s ease-out both; }
+.shimmer-text {
+  background: linear-gradient(90deg, #fff 0%, #ff6a1a 25%, #22d3ee 50%, #ff6a1a 75%, #fff 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 6s linear infinite;
+}
+.tap-target { min-height: 44px; }
