@@ -36,6 +36,8 @@ const STYLES = ["Balanced", "Top Speed", "Acceleration", "Grip", "Drift"];
 
 function CustomizePage() {
   const [tab, setTab] = useState<"driver" | "car">("driver");
+  const [loaded, setLoaded] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [profile, setProfile] = useState<Profile>({
     name: "Apex",
     skin: SKINS[1],
@@ -58,13 +60,36 @@ function CustomizePage() {
       if (p) setProfile(JSON.parse(p));
       if (c) setCar(JSON.parse(c));
     } catch {}
+    setLoaded(true);
   }, []);
+
+  // Auto-save on every change (after initial load)
+  useEffect(() => {
+    if (!loaded) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem("af-profile", JSON.stringify(profile));
+        localStorage.setItem("af-car", JSON.stringify(car));
+        setSavedAt(Date.now());
+      } catch {}
+    }, 250);
+    return () => clearTimeout(t);
+  }, [profile, car, loaded]);
 
   function save() {
     try {
       localStorage.setItem("af-profile", JSON.stringify(profile));
       localStorage.setItem("af-car", JSON.stringify(car));
+      setSavedAt(Date.now());
     } catch {}
+  }
+  function resetAll() {
+    try {
+      localStorage.removeItem("af-profile");
+      localStorage.removeItem("af-car");
+    } catch {}
+    setProfile({ name: "Apex", skin: SKINS[1], outfit: OUTFITS[0], helmet: HELMETS[0], number: 7 });
+    setCar({ bodyColor: "#ff6a1a", rim: RIMS[0], neon: NEONS[1], decal: DECALS[0], style: STYLES[0] });
   }
 
   return (
@@ -75,11 +100,20 @@ function CustomizePage() {
             ASPHALT FEVER
           </Link>
           <div className="flex gap-2">
+            <span className="hidden sm:inline-flex items-center px-3 text-[10px] font-display uppercase tracking-widest text-muted-foreground">
+              {savedAt ? `✓ Saved ${new Date(savedAt).toLocaleTimeString()}` : "Auto-save on"}
+            </span>
+            <button
+              onClick={resetAll}
+              className="tap-target px-4 sm:px-5 rounded-full glass font-display text-xs sm:text-sm uppercase tracking-widest hover:shadow-cyan transition-all"
+            >
+              Reset
+            </button>
             <button
               onClick={save}
               className="tap-target px-4 sm:px-5 rounded-full bg-primary text-primary-foreground font-display text-xs sm:text-sm uppercase tracking-widest hover:scale-105 transition-transform shadow-neon"
             >
-              Save Build
+              Save
             </button>
             <Link
               to="/play"
