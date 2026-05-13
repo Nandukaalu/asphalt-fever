@@ -1118,7 +1118,7 @@ export default function RacingGame() {
       {screen === "editor" && (
         <TrackEditor
           onCancel={() => setScreen("track")}
-          onSave={(t) => {
+          onSave={(t: TrackDef) => {
             const next = [...customTracks, t];
             setCustomTracks(next);
             saveCustomTracks(next);
