@@ -958,6 +958,9 @@ export default function RacingGame() {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
 
+      // Animate futuristic environment
+      for (let i = 0; i < envUpdaters.length; i++) envUpdaters[i](now);
+
       // ---------- Pre-race countdown: hold cars on the grid ----------
       const preRace = now < raceStartAt;
       if (preRace) {
