@@ -1096,12 +1096,34 @@ export default function RacingGame() {
           career={career}
           mode={mode}
           lapsChoice={lapsChoice}
+          allTracks={allTracks}
+          customTracks={customTracks}
+          onCreate={() => setScreen("editor")}
+          onDeleteCustom={(id) => {
+            const next = customTracks.filter((t) => t.id !== id);
+            setCustomTracks(next);
+            saveCustomTracks(next);
+            if (trackId === id) setTrackId(TRACKS[0].id);
+          }}
           onPickLaps={(n) => { setLapsChoice(n); if (mode === "multi" && isHost) updatePresence({ laps: n }); }}
           onPick={(id) => { setTrackId(id); if (mode === "multi" && isHost) updatePresence({ trackId: id }); }}
           onBack={() => setScreen("driver")}
           onStart={() => {
             if (mode === "multi") setScreen("lobby");
             else { setResult(null); setScreen("racing"); }
+          }}
+        />
+      )}
+
+      {screen === "editor" && (
+        <TrackEditor
+          onCancel={() => setScreen("track")}
+          onSave={(t) => {
+            const next = [...customTracks, t];
+            setCustomTracks(next);
+            saveCustomTracks(next);
+            setTrackId(t.id);
+            setScreen("track");
           }}
         />
       )}
