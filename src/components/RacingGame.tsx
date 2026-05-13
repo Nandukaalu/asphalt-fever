@@ -233,6 +233,7 @@ export default function RacingGame() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [mode, setMode] = useState<Mode>("quick");
+  const [customDrivers, setCustomDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
   const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
@@ -263,8 +264,27 @@ export default function RacingGame() {
 
   useEffect(() => { setCareer(loadSave()); }, []);
   useEffect(() => { setCustomTracks(loadCustomTracks()); }, []);
+  useEffect(() => {
+    const apply = () => {
+      const { drivers, activeId } = loadCustomDrivers();
+      setCustomDrivers(drivers);
+      if (activeId && drivers.some((d) => d.id === activeId)) setDriverId(activeId);
+    };
+    apply();
+    const onStorage = (e: StorageEvent) => { if (e.key === "af-garage-v1") apply(); };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", apply);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", apply);
+    };
+  }, []);
 
-  const driver = useMemo(() => DRIVERS.find((d) => d.id === driverId)!, [driverId]);
+  const allDrivers = useMemo(() => [...customDrivers, ...DRIVERS], [customDrivers]);
+  const driver = useMemo(
+    () => allDrivers.find((d) => d.id === driverId) ?? allDrivers[0],
+    [allDrivers, driverId]
+  );
   const allTracks = useMemo(() => [...TRACKS, ...customTracks], [customTracks]);
   const track = useMemo(() => allTracks.find((t) => t.id === trackId) ?? TRACKS[0], [allTracks, trackId]);
 
