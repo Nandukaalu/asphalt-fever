@@ -699,7 +699,8 @@ export default function RacingGame() {
     const totalLaps = lapsChoice;
     let lapStart = performance.now();
     let bestLap = 0;
-    let prevT = 0;
+    let prevT = pSlot.t;
+    let firstCross = false;
     let raceFinished = false;
     let raceProgress = 0; // total fraction
 
@@ -789,8 +790,8 @@ export default function RacingGame() {
         const nx = dx / len, nz = dz / len;
         carPos.x = center.x + nx * WALL_LIMIT;
         carPos.z = center.z + nz * WALL_LIMIT;
-        speed *= 0.55;
-        lateralVel *= -0.3;
+        speed *= 0.9;     // gentle scrape, not a full stop
+        lateralVel *= -0.2;
       }
 
       // Cone collisions (hitboxes)
@@ -815,14 +816,19 @@ export default function RacingGame() {
       player.wheels[1].rotation.y = steering * 0.4;
       player.steeringGroup.rotation.z = -steering * 0.9;
 
-      // Lap detection
+      // Lap detection — first crossing of start line just arms the timer
       if (prevT > 0.9 && ct2.t < 0.1) {
-        const lapTime = (now - lapStart) / 1000;
-        if (bestLap === 0 || lapTime < bestLap) bestLap = lapTime;
-        lap++;
-        lapStart = now;
-        if (lap > totalLaps && !raceFinished) {
-          raceFinished = true;
+        if (!firstCross) {
+          firstCross = true;
+          lapStart = now;
+        } else {
+          const lapTime = (now - lapStart) / 1000;
+          if (bestLap === 0 || lapTime < bestLap) bestLap = lapTime;
+          lap++;
+          lapStart = now;
+          if (lap > totalLaps && !raceFinished) {
+            raceFinished = true;
+          }
         }
       }
       prevT = ct2.t;
