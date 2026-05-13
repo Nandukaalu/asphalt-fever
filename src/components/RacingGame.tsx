@@ -110,9 +110,78 @@ const TRACKS: TrackDef[] = [
       [-255, 285], [-410, 130], [-445, -65], [-350, -220], [-190, -190], [-65, -95],
     ],
   },
+  {
+    id: "suzuka",
+    name: "Suzuka",
+    country: "Japan",
+    laps: 15,
+    waypoints: [
+      [0, 0], [0, -180], [110, -290], [240, -260], [340, -160], [290, -40],
+      [180, 30], [80, 130], [180, 240], [320, 290], [410, 200], [410, 60],
+      [340, -360], [200, -440], [40, -440], [-130, -380], [-260, -240],
+      [-320, -90], [-280, 80], [-180, 180], [-90, 95],
+    ],
+  },
+  {
+    id: "interlagos",
+    name: "Interlagos",
+    country: "Brazil",
+    laps: 15,
+    waypoints: [
+      [0, 0], [-90, -120], [-220, -180], [-340, -140], [-410, -30],
+      [-360, 110], [-220, 180], [-60, 200], [110, 240], [260, 220],
+      [360, 130], [380, -20], [310, -160], [180, -240], [60, -190],
+    ],
+  },
+  {
+    id: "cota",
+    name: "Circuit of Americas",
+    country: "USA",
+    laps: 15,
+    waypoints: [
+      [0, 0], [40, -160], [180, -260], [280, -180], [220, -60], [320, 30],
+      [430, -40], [490, -180], [430, -340], [280, -420], [110, -440],
+      [-70, -400], [-220, -310], [-330, -180], [-380, -20], [-340, 140],
+      [-220, 230], [-80, 240], [40, 170],
+    ],
+  },
+  {
+    id: "singapore",
+    name: "Singapore",
+    country: "Marina Bay",
+    laps: 15,
+    waypoints: [
+      [0, 0], [80, -90], [180, -120], [280, -90], [360, 10], [380, 140],
+      [310, 240], [180, 290], [40, 280], [-90, 240], [-200, 160],
+      [-260, 40], [-240, -90], [-160, -180], [-60, -180],
+    ],
+  },
+  {
+    id: "bahrain",
+    name: "Bahrain",
+    country: "Sakhir",
+    laps: 15,
+    waypoints: [
+      [0, 0], [60, -160], [200, -220], [340, -180], [430, -60],
+      [430, 100], [340, 230], [200, 290], [40, 280], [-110, 230],
+      [-240, 130], [-300, -10], [-260, -150], [-150, -200], [-60, -130],
+    ],
+  },
 ];
 
 const SAVE_KEY = "apex-gp-career-v1";
+const CUSTOM_TRACKS_KEY = "apex-gp-custom-tracks-v1";
+
+function loadCustomTracks(): TrackDef[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_TRACKS_KEY);
+    return raw ? (JSON.parse(raw) as TrackDef[]) : [];
+  } catch { return []; }
+}
+function saveCustomTracks(list: TrackDef[]) {
+  try { localStorage.setItem(CUSTOM_TRACKS_KEY, JSON.stringify(list)); } catch {}
+}
 
 function loadSave(): CareerSave | null {
   if (typeof window === "undefined") return null;
