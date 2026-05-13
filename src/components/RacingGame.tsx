@@ -1382,6 +1382,7 @@ export default function RacingGame() {
 
       {screen === "driver" && (
         <DriverSelect
+          drivers={allDrivers}
           driverId={driverId}
           onPick={(id) => { setDriverId(id); if (mode === "multi") updatePresence({ driverId: id }); }}
           onBack={() => setScreen("menu")}
@@ -1573,7 +1574,8 @@ function MainMenu({ career, onQuick, onCareer, onMulti, onReset }: {
   );
 }
 
-function DriverSelect({ driverId, onPick, onBack, onNext }: {
+function DriverSelect({ drivers, driverId, onPick, onBack, onNext }: {
+  drivers: Driver[];
   driverId: string;
   onPick: (id: string) => void;
   onBack: () => void;
@@ -1584,17 +1586,21 @@ function DriverSelect({ driverId, onPick, onBack, onNext }: {
       <div className="max-w-3xl mx-auto">
         <button onClick={onBack} className="text-white/60 hover:text-white text-xs uppercase tracking-widest mb-4">← Back</button>
         <h2 className="text-3xl sm:text-4xl font-black mb-1">Choose Your Driver</h2>
-        <p className="text-white/50 text-sm mb-6 uppercase tracking-widest">Select your seat for the season</p>
+        <p className="text-white/50 text-sm mb-6 uppercase tracking-widest">Your custom drivers appear first</p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {DRIVERS.map((d) => {
+          {drivers.map((d) => {
             const selected = d.id === driverId;
+            const isCustom = d.id.startsWith("custom:");
             return (
               <button
                 key={d.id}
                 onClick={() => onPick(d.id)}
-                className={`relative p-4 border-2 transition text-left ${selected ? "border-red-500 bg-red-500/10" : "border-white/20 hover:border-white/40 bg-black/40"}`}
+                className={`relative p-4 border-2 transition text-left ${selected ? "border-red-500 bg-red-500/10" : isCustom ? "border-cyan-400/60 bg-cyan-400/5 hover:border-cyan-300" : "border-white/20 hover:border-white/40 bg-black/40"}`}
               >
+                {isCustom && (
+                  <div className="absolute top-1 right-1 text-[9px] font-black tracking-widest text-cyan-300 bg-black/60 px-1.5 py-0.5 rounded">YOURS</div>
+                )}
                 <div className="h-14 rounded mb-3 flex items-center justify-center text-2xl font-black"
                   style={{ background: `#${d.primary.toString(16).padStart(6, "0")}`, color: `#${d.secondary.toString(16).padStart(6, "0")}` }}>
                   #{d.number}
