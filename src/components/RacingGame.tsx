@@ -64,6 +64,36 @@ const DRIVERS: Driver[] = [
   { id: "onyx", name: "Sam Carter", team: "Onyx Racing", primary: 0x0f172a, secondary: 0xfbbf24, number: 55 },
 ];
 
+// ---- Custom garage drivers (from /customize page) ----
+function hexToInt(hex: string, fallback: number): number {
+  if (!hex || typeof hex !== "string") return fallback;
+  const s = hex.replace("#", "");
+  const n = parseInt(s.length === 3 ? s.split("").map((c) => c + c).join("") : s, 16);
+  return Number.isFinite(n) ? n : fallback;
+}
+function loadCustomDrivers(): { drivers: Driver[]; activeId: string | null } {
+  if (typeof window === "undefined") return { drivers: [], activeId: null };
+  try {
+    const raw = localStorage.getItem("af-garage-v1");
+    if (!raw) return { drivers: [], activeId: null };
+    const g = JSON.parse(raw) as {
+      drivers: Array<{ id: string; profile: { name: string; number: number; outfit: string }; car: { bodyColor: string; style: string; neon: string } }>;
+      activeId: string;
+    };
+    const drivers: Driver[] = (g.drivers || []).map((d) => ({
+      id: `custom:${d.id}`,
+      name: d.profile?.name || "Custom",
+      team: `My Garage • ${d.car?.style ?? "Custom"}`,
+      primary: hexToInt(d.car?.bodyColor, 0xff6a1a),
+      secondary: hexToInt(d.car?.neon && d.car.neon !== "none" ? d.car.neon : d.profile?.outfit, 0xffffff),
+      number: Math.max(0, Math.min(99, Number(d.profile?.number ?? 7))),
+    }));
+    return { drivers, activeId: g.activeId ? `custom:${g.activeId}` : null };
+  } catch {
+    return { drivers: [], activeId: null };
+  }
+}
+
 // Hand-tuned waypoint loops inspired by real circuits (not actual layouts).
 const TRACKS: TrackDef[] = [
   {
