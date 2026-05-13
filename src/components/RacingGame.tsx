@@ -1218,6 +1218,19 @@ export default function RacingGame() {
             Quit
           </button>
 
+          {countdown !== null && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none select-none">
+              <div
+                key={countdown}
+                className={`font-black tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] animate-in zoom-in-50 fade-in duration-300 ${
+                  countdown === 0 ? "text-green-400 text-[12rem]" : "text-white text-[14rem]"
+                }`}
+              >
+                {countdown === 0 ? "GO" : countdown}
+              </div>
+            </div>
+          )}
+
           <TouchControls touchRef={touchRef} />
         </>
       )}
