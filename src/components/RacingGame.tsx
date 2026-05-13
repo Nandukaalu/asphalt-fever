@@ -200,13 +200,14 @@ function writeSave(s: CareerSave) {
 export default function RacingGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, totalLaps: 3, lapTime: 0, bestLap: 0, position: 1 });
-  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "lobby" | "racing" | "result">("menu");
+  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [mode, setMode] = useState<Mode>("quick");
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
   const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
+  const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
   // -------- Multiplayer state --------
@@ -230,9 +231,11 @@ export default function RacingGame() {
   }, [playerName]);
 
   useEffect(() => { setCareer(loadSave()); }, []);
+  useEffect(() => { setCustomTracks(loadCustomTracks()); }, []);
 
   const driver = useMemo(() => DRIVERS.find((d) => d.id === driverId)!, [driverId]);
-  const track = useMemo(() => TRACKS.find((t) => t.id === trackId)!, [trackId]);
+  const allTracks = useMemo(() => [...TRACKS, ...customTracks], [customTracks]);
+  const track = useMemo(() => allTracks.find((t) => t.id === trackId) ?? TRACKS[0], [allTracks, trackId]);
 
   // -------- Multiplayer helpers --------
   function leaveRoom() {
