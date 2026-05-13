@@ -736,11 +736,50 @@ export default function RacingGame() {
     let last = performance.now();
     let raf = 0;
     let hudTick = 0;
+    const raceStartAt = last + 3800;
+    let lastCountdownShown = 99;
+    setCountdown(3);
 
     const animate = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+
+      // ---------- Pre-race countdown: hold cars on the grid ----------
+      const preRace = now < raceStartAt;
+      if (preRace) {
+        const remaining = Math.ceil((raceStartAt - now) / 1000);
+        const shown = remaining > 0 ? remaining : 0; // 0 == GO
+        if (shown !== lastCountdownShown) {
+          lastCountdownShown = shown;
+          setCountdown(shown);
+        }
+        // Lock player on grid
+        speed = 0;
+        lateralVel = 0;
+        player.group.position.set(pSlot.x, 0, pSlot.z);
+        player.group.rotation.y = startHeading;
+        // Lock AI cars on their grid slots
+        if (!isMulti) ais.forEach((ai) => {
+          ai.car.group.position.set(
+            ai.car.group.position.x,
+            0,
+            ai.car.group.position.z,
+          );
+        });
+        // Camera follow during countdown
+        const back = new THREE.Vector3(0, 4.5, -10).applyEuler(new THREE.Euler(0, startHeading, 0));
+        const camWorld = player.group.position.clone().add(back);
+        camera.position.lerp(camWorld, 0.2);
+        camera.lookAt(player.group.position.x + Math.sin(startHeading) * 12, 1.5, player.group.position.z + Math.cos(startHeading) * 12);
+        renderer.render(scene, camera);
+        lapStart = now;
+        raf = requestAnimationFrame(animate);
+        return;
+      } else if (lastCountdownShown !== -1) {
+        lastCountdownShown = -1;
+        setCountdown(null);
+      }
 
       const t = touchRef.current;
       const accel = !raceFinished && (keys["w"] || keys["arrowup"] || t.accel);
