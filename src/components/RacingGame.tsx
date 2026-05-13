@@ -1293,6 +1293,164 @@ function DriverSelect({ driverId, onPick, onBack, onNext }: {
   );
 }
 
+function TrackEditor({ onCancel, onSave }: {
+  onCancel: () => void;
+  onSave: (t: TrackDef) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [points, setPoints] = useState<[number, number][]>([]);
+  const [name, setName] = useState("My Track");
+  const SIZE = 480;
+  const SCALE = 1.6; // 1 px = 1.6 world units => world range ≈ ±384
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#0b0f17";
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    // grid
+    ctx.strokeStyle = "#1f2937";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+      ctx.beginPath();
+      ctx.moveTo((i * SIZE) / 8, 0);
+      ctx.lineTo((i * SIZE) / 8, SIZE);
+      ctx.moveTo(0, (i * SIZE) / 8);
+      ctx.lineTo(SIZE, (i * SIZE) / 8);
+      ctx.stroke();
+    }
+    // start marker
+    if (points.length > 0) {
+      const [x0, z0] = points[0];
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(x0 / SCALE + SIZE / 2 - 6, z0 / SCALE + SIZE / 2 - 6, 12, 12);
+    }
+    // closed-loop catmull preview
+    if (points.length >= 3) {
+      const pts = points.map(([x, z]) => new THREE.Vector3(x, 0, z));
+      const curve = new THREE.CatmullRomCurve3(pts, true, "centripetal", 0.5);
+      // outline (track width)
+      const W = 24;
+      ctx.fillStyle = "#1f2937";
+      ctx.beginPath();
+      const N = 200;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const p = curve.getPointAt(t);
+        const tg = curve.getTangentAt(t).normalize();
+        const nx = -tg.z, nz = tg.x;
+        const lx = (p.x + nx * (W / 2)) / SCALE + SIZE / 2;
+        const lz = (p.z + nz * (W / 2)) / SCALE + SIZE / 2;
+        if (i === 0) ctx.moveTo(lx, lz);
+        else ctx.lineTo(lx, lz);
+      }
+      for (let i = N; i >= 0; i--) {
+        const t = i / N;
+        const p = curve.getPointAt(t);
+        const tg = curve.getTangentAt(t).normalize();
+        const nx = -tg.z, nz = tg.x;
+        const rx = (p.x - nx * (W / 2)) / SCALE + SIZE / 2;
+        const rz = (p.z - nz * (W / 2)) / SCALE + SIZE / 2;
+        ctx.lineTo(rx, rz);
+      }
+      ctx.closePath();
+      ctx.fill();
+      // centerline
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i <= N; i++) {
+        const p = curve.getPointAt(i / N);
+        const x = p.x / SCALE + SIZE / 2;
+        const z = p.z / SCALE + SIZE / 2;
+        if (i === 0) ctx.moveTo(x, z);
+        else ctx.lineTo(x, z);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+    // points
+    points.forEach(([x, z], i) => {
+      ctx.fillStyle = i === 0 ? "#22c55e" : "#fbbf24";
+      ctx.beginPath();
+      ctx.arc(x / SCALE + SIZE / 2, z / SCALE + SIZE / 2, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }, [points]);
+
+  const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const x = (px - rect.width / 2) * (SCALE * SIZE / rect.width);
+    const z = (py - rect.height / 2) * (SCALE * SIZE / rect.height);
+    setPoints((prev) => [...prev, [Math.round(x), Math.round(z)]]);
+  };
+
+  const canSave = points.length >= 6 && name.trim().length > 0;
+
+  return (
+    <div className="absolute inset-0 bg-gradient-to-b from-black/90 to-black/95 text-white z-30 px-4 py-6 overflow-y-auto">
+      <div className="max-w-2xl mx-auto">
+        <button onClick={onCancel} className="text-white/60 hover:text-white text-xs uppercase tracking-widest mb-3">← Cancel</button>
+        <h2 className="text-3xl font-black mb-1">Track Editor</h2>
+        <p className="text-white/50 text-xs uppercase tracking-widest mb-4">Tap the grid to drop waypoints — at least 6, in order. The first point is the start/finish line.</p>
+
+        <div className="flex flex-col items-center gap-3">
+          <canvas
+            ref={canvasRef}
+            width={SIZE}
+            height={SIZE}
+            onClick={onClick}
+            className="w-full max-w-[480px] aspect-square border border-white/15 cursor-crosshair touch-none"
+          />
+
+          <div className="flex flex-wrap gap-2 w-full max-w-[480px]">
+            <button
+              onClick={() => setPoints((p) => p.slice(0, -1))}
+              disabled={points.length === 0}
+              className="flex-1 py-2 px-3 bg-white/10 hover:bg-white/20 disabled:opacity-40 border border-white/20 uppercase tracking-widest text-xs"
+            >
+              Undo ({points.length})
+            </button>
+            <button
+              onClick={() => setPoints([])}
+              className="flex-1 py-2 px-3 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest text-xs"
+            >
+              Clear
+            </button>
+          </div>
+
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value.slice(0, 24))}
+            placeholder="Track name"
+            className="w-full max-w-[480px] bg-black/50 border border-white/20 px-3 py-2 text-white font-mono"
+          />
+
+          <button
+            onClick={() => canSave && onSave({
+              id: `custom-${Date.now()}`,
+              name: name.trim(),
+              country: "Custom",
+              laps: 5,
+              waypoints: points,
+            })}
+            disabled={!canSave}
+            className="w-full max-w-[480px] px-6 py-4 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]"
+          >
+            Save & Race
+          </button>
+          {!canSave && points.length < 6 && (
+            <div className="text-xs text-white/50">Add at least {6 - points.length} more waypoint(s)</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MultiplayerEntry({ playerName, setPlayerName, onCreate, onJoin, onBack }: {
   playerName: string;
   setPlayerName: (n: string) => void;
