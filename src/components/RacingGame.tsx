@@ -110,9 +110,78 @@ const TRACKS: TrackDef[] = [
       [-255, 285], [-410, 130], [-445, -65], [-350, -220], [-190, -190], [-65, -95],
     ],
   },
+  {
+    id: "suzuka",
+    name: "Suzuka",
+    country: "Japan",
+    laps: 15,
+    waypoints: [
+      [0, 0], [0, -180], [110, -290], [240, -260], [340, -160], [290, -40],
+      [180, 30], [80, 130], [180, 240], [320, 290], [410, 200], [410, 60],
+      [340, -360], [200, -440], [40, -440], [-130, -380], [-260, -240],
+      [-320, -90], [-280, 80], [-180, 180], [-90, 95],
+    ],
+  },
+  {
+    id: "interlagos",
+    name: "Interlagos",
+    country: "Brazil",
+    laps: 15,
+    waypoints: [
+      [0, 0], [-90, -120], [-220, -180], [-340, -140], [-410, -30],
+      [-360, 110], [-220, 180], [-60, 200], [110, 240], [260, 220],
+      [360, 130], [380, -20], [310, -160], [180, -240], [60, -190],
+    ],
+  },
+  {
+    id: "cota",
+    name: "Circuit of Americas",
+    country: "USA",
+    laps: 15,
+    waypoints: [
+      [0, 0], [40, -160], [180, -260], [280, -180], [220, -60], [320, 30],
+      [430, -40], [490, -180], [430, -340], [280, -420], [110, -440],
+      [-70, -400], [-220, -310], [-330, -180], [-380, -20], [-340, 140],
+      [-220, 230], [-80, 240], [40, 170],
+    ],
+  },
+  {
+    id: "singapore",
+    name: "Singapore",
+    country: "Marina Bay",
+    laps: 15,
+    waypoints: [
+      [0, 0], [80, -90], [180, -120], [280, -90], [360, 10], [380, 140],
+      [310, 240], [180, 290], [40, 280], [-90, 240], [-200, 160],
+      [-260, 40], [-240, -90], [-160, -180], [-60, -180],
+    ],
+  },
+  {
+    id: "bahrain",
+    name: "Bahrain",
+    country: "Sakhir",
+    laps: 15,
+    waypoints: [
+      [0, 0], [60, -160], [200, -220], [340, -180], [430, -60],
+      [430, 100], [340, 230], [200, 290], [40, 280], [-110, 230],
+      [-240, 130], [-300, -10], [-260, -150], [-150, -200], [-60, -130],
+    ],
+  },
 ];
 
 const SAVE_KEY = "apex-gp-career-v1";
+const CUSTOM_TRACKS_KEY = "apex-gp-custom-tracks-v1";
+
+function loadCustomTracks(): TrackDef[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_TRACKS_KEY);
+    return raw ? (JSON.parse(raw) as TrackDef[]) : [];
+  } catch { return []; }
+}
+function saveCustomTracks(list: TrackDef[]) {
+  try { localStorage.setItem(CUSTOM_TRACKS_KEY, JSON.stringify(list)); } catch {}
+}
 
 function loadSave(): CareerSave | null {
   if (typeof window === "undefined") return null;
@@ -131,13 +200,14 @@ function writeSave(s: CareerSave) {
 export default function RacingGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, totalLaps: 3, lapTime: 0, bestLap: 0, position: 1 });
-  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "lobby" | "racing" | "result">("menu");
+  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [mode, setMode] = useState<Mode>("quick");
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
   const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
+  const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
   // -------- Multiplayer state --------
@@ -161,9 +231,11 @@ export default function RacingGame() {
   }, [playerName]);
 
   useEffect(() => { setCareer(loadSave()); }, []);
+  useEffect(() => { setCustomTracks(loadCustomTracks()); }, []);
 
   const driver = useMemo(() => DRIVERS.find((d) => d.id === driverId)!, [driverId]);
-  const track = useMemo(() => TRACKS.find((t) => t.id === trackId)!, [trackId]);
+  const allTracks = useMemo(() => [...TRACKS, ...customTracks], [customTracks]);
+  const track = useMemo(() => allTracks.find((t) => t.id === trackId) ?? TRACKS[0], [allTracks, trackId]);
 
   // -------- Multiplayer helpers --------
   function leaveRoom() {
@@ -530,10 +602,35 @@ export default function RacingGame() {
     // Player car
     const player = buildCar(driver);
     scene.add(player.group);
-    const startPos = curve.getPointAt(0.001);
-    const startTan = curve.getTangentAt(0.001).normalize();
-    const startHeading = Math.atan2(startTan.x, startTan.z);
-    player.group.position.copy(startPos);
+    // Grid placement helper — slot 0 is pole, behind start/finish, staggered L/R
+    const totalCurveLen = curve.getLength();
+    const GRID_LONG = 7.5;
+    const GRID_LAT = 3.2;
+    function gridSlot(slot: number) {
+      const row = Math.floor(slot / 2);
+      const side = slot % 2 === 0 ? 1 : -1;
+      const backDist = 5 + row * GRID_LONG;
+      let backT = 1 - backDist / totalCurveLen;
+      while (backT < 0) backT += 1;
+      const p = curve.getPointAt(backT);
+      const tg = curve.getTangentAt(backT).normalize();
+      const n = new THREE.Vector3(-tg.z, 0, tg.x);
+      return {
+        x: p.x + n.x * side * GRID_LAT,
+        z: p.z + n.z * side * GRID_LAT,
+        heading: Math.atan2(tg.x, tg.z),
+        t: backT,
+      };
+    }
+    const isMulti = mode === "multi";
+    let playerSlot = 4;
+    if (isMulti) {
+      const idx = lobbyPlayers.findIndex((p) => p.id === playerIdRef.current);
+      playerSlot = idx >= 0 ? idx : 0;
+    }
+    const pSlot = gridSlot(playerSlot);
+    const startHeading = pSlot.heading;
+    player.group.position.set(pSlot.x, 0, pSlot.z);
     player.group.rotation.y = startHeading;
 
     // AI cars (other drivers)
@@ -541,15 +638,19 @@ export default function RacingGame() {
     const MAX_SPEED_PREVIEW = 78;
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
     const ais: (AI & { driver: Driver; offset: number })[] = [];
-    const isMulti = mode === "multi";
     if (!isMulti) {
       const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
-      otherDrivers.forEach((d, i) => {
+      let next = 0;
+      otherDrivers.forEach((d) => {
+        if (next === playerSlot) next++;
+        const slot = next++;
+        const g = gridSlot(slot);
         const c = buildCar(d);
         scene.add(c.group);
-        const tStart = -0.004 - i * 0.005;
-        const lateral = (i % 2 === 0 ? 1 : -1) * (2 + (i % 4));
-        ais.push({ car: c, t: (tStart + 1) % 1, speed: AI_SPEED, driver: d, offset: lateral });
+        c.group.position.set(g.x, 0, g.z);
+        c.group.rotation.y = g.heading;
+        const lateral = (slot % 2 === 0 ? 1 : -1) * GRID_LAT;
+        ais.push({ car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral });
       });
     }
 
@@ -598,7 +699,8 @@ export default function RacingGame() {
     const totalLaps = lapsChoice;
     let lapStart = performance.now();
     let bestLap = 0;
-    let prevT = 0;
+    let prevT = pSlot.t;
+    let firstCross = false;
     let raceFinished = false;
     let raceProgress = 0; // total fraction
 
@@ -688,8 +790,8 @@ export default function RacingGame() {
         const nx = dx / len, nz = dz / len;
         carPos.x = center.x + nx * WALL_LIMIT;
         carPos.z = center.z + nz * WALL_LIMIT;
-        speed *= 0.55;
-        lateralVel *= -0.3;
+        speed *= 0.9;     // gentle scrape, not a full stop
+        lateralVel *= -0.2;
       }
 
       // Cone collisions (hitboxes)
@@ -714,14 +816,19 @@ export default function RacingGame() {
       player.wheels[1].rotation.y = steering * 0.4;
       player.steeringGroup.rotation.z = -steering * 0.9;
 
-      // Lap detection
+      // Lap detection — first crossing of start line just arms the timer
       if (prevT > 0.9 && ct2.t < 0.1) {
-        const lapTime = (now - lapStart) / 1000;
-        if (bestLap === 0 || lapTime < bestLap) bestLap = lapTime;
-        lap++;
-        lapStart = now;
-        if (lap > totalLaps && !raceFinished) {
-          raceFinished = true;
+        if (!firstCross) {
+          firstCross = true;
+          lapStart = now;
+        } else {
+          const lapTime = (now - lapStart) / 1000;
+          if (bestLap === 0 || lapTime < bestLap) bestLap = lapTime;
+          lap++;
+          lapStart = now;
+          if (lap > totalLaps && !raceFinished) {
+            raceFinished = true;
+          }
         }
       }
       prevT = ct2.t;
@@ -989,12 +1096,34 @@ export default function RacingGame() {
           career={career}
           mode={mode}
           lapsChoice={lapsChoice}
+          allTracks={allTracks}
+          customTracks={customTracks}
+          onCreate={() => setScreen("editor")}
+          onDeleteCustom={(id) => {
+            const next = customTracks.filter((t) => t.id !== id);
+            setCustomTracks(next);
+            saveCustomTracks(next);
+            if (trackId === id) setTrackId(TRACKS[0].id);
+          }}
           onPickLaps={(n) => { setLapsChoice(n); if (mode === "multi" && isHost) updatePresence({ laps: n }); }}
           onPick={(id) => { setTrackId(id); if (mode === "multi" && isHost) updatePresence({ trackId: id }); }}
           onBack={() => setScreen("driver")}
           onStart={() => {
             if (mode === "multi") setScreen("lobby");
             else { setResult(null); setScreen("racing"); }
+          }}
+        />
+      )}
+
+      {screen === "editor" && (
+        <TrackEditor
+          onCancel={() => setScreen("track")}
+          onSave={(t: TrackDef) => {
+            const next = [...customTracks, t];
+            setCustomTracks(next);
+            saveCustomTracks(next);
+            setTrackId(t.id);
+            setScreen("track");
           }}
         />
       )}
@@ -1164,6 +1293,164 @@ function DriverSelect({ driverId, onPick, onBack, onNext }: {
   );
 }
 
+function TrackEditor({ onCancel, onSave }: {
+  onCancel: () => void;
+  onSave: (t: TrackDef) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [points, setPoints] = useState<[number, number][]>([]);
+  const [name, setName] = useState("My Track");
+  const SIZE = 480;
+  const SCALE = 1.6; // 1 px = 1.6 world units => world range ≈ ±384
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "#0b0f17";
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    // grid
+    ctx.strokeStyle = "#1f2937";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+      ctx.beginPath();
+      ctx.moveTo((i * SIZE) / 8, 0);
+      ctx.lineTo((i * SIZE) / 8, SIZE);
+      ctx.moveTo(0, (i * SIZE) / 8);
+      ctx.lineTo(SIZE, (i * SIZE) / 8);
+      ctx.stroke();
+    }
+    // start marker
+    if (points.length > 0) {
+      const [x0, z0] = points[0];
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(x0 / SCALE + SIZE / 2 - 6, z0 / SCALE + SIZE / 2 - 6, 12, 12);
+    }
+    // closed-loop catmull preview
+    if (points.length >= 3) {
+      const pts = points.map(([x, z]) => new THREE.Vector3(x, 0, z));
+      const curve = new THREE.CatmullRomCurve3(pts, true, "centripetal", 0.5);
+      // outline (track width)
+      const W = 24;
+      ctx.fillStyle = "#1f2937";
+      ctx.beginPath();
+      const N = 200;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const p = curve.getPointAt(t);
+        const tg = curve.getTangentAt(t).normalize();
+        const nx = -tg.z, nz = tg.x;
+        const lx = (p.x + nx * (W / 2)) / SCALE + SIZE / 2;
+        const lz = (p.z + nz * (W / 2)) / SCALE + SIZE / 2;
+        if (i === 0) ctx.moveTo(lx, lz);
+        else ctx.lineTo(lx, lz);
+      }
+      for (let i = N; i >= 0; i--) {
+        const t = i / N;
+        const p = curve.getPointAt(t);
+        const tg = curve.getTangentAt(t).normalize();
+        const nx = -tg.z, nz = tg.x;
+        const rx = (p.x - nx * (W / 2)) / SCALE + SIZE / 2;
+        const rz = (p.z - nz * (W / 2)) / SCALE + SIZE / 2;
+        ctx.lineTo(rx, rz);
+      }
+      ctx.closePath();
+      ctx.fill();
+      // centerline
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i <= N; i++) {
+        const p = curve.getPointAt(i / N);
+        const x = p.x / SCALE + SIZE / 2;
+        const z = p.z / SCALE + SIZE / 2;
+        if (i === 0) ctx.moveTo(x, z);
+        else ctx.lineTo(x, z);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    }
+    // points
+    points.forEach(([x, z], i) => {
+      ctx.fillStyle = i === 0 ? "#22c55e" : "#fbbf24";
+      ctx.beginPath();
+      ctx.arc(x / SCALE + SIZE / 2, z / SCALE + SIZE / 2, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }, [points]);
+
+  const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const x = (px - rect.width / 2) * (SCALE * SIZE / rect.width);
+    const z = (py - rect.height / 2) * (SCALE * SIZE / rect.height);
+    setPoints((prev) => [...prev, [Math.round(x), Math.round(z)]]);
+  };
+
+  const canSave = points.length >= 6 && name.trim().length > 0;
+
+  return (
+    <div className="absolute inset-0 bg-gradient-to-b from-black/90 to-black/95 text-white z-30 px-4 py-6 overflow-y-auto">
+      <div className="max-w-2xl mx-auto">
+        <button onClick={onCancel} className="text-white/60 hover:text-white text-xs uppercase tracking-widest mb-3">← Cancel</button>
+        <h2 className="text-3xl font-black mb-1">Track Editor</h2>
+        <p className="text-white/50 text-xs uppercase tracking-widest mb-4">Tap the grid to drop waypoints — at least 6, in order. The first point is the start/finish line.</p>
+
+        <div className="flex flex-col items-center gap-3">
+          <canvas
+            ref={canvasRef}
+            width={SIZE}
+            height={SIZE}
+            onClick={onClick}
+            className="w-full max-w-[480px] aspect-square border border-white/15 cursor-crosshair touch-none"
+          />
+
+          <div className="flex flex-wrap gap-2 w-full max-w-[480px]">
+            <button
+              onClick={() => setPoints((p) => p.slice(0, -1))}
+              disabled={points.length === 0}
+              className="flex-1 py-2 px-3 bg-white/10 hover:bg-white/20 disabled:opacity-40 border border-white/20 uppercase tracking-widest text-xs"
+            >
+              Undo ({points.length})
+            </button>
+            <button
+              onClick={() => setPoints([])}
+              className="flex-1 py-2 px-3 bg-white/10 hover:bg-white/20 border border-white/20 uppercase tracking-widest text-xs"
+            >
+              Clear
+            </button>
+          </div>
+
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value.slice(0, 24))}
+            placeholder="Track name"
+            className="w-full max-w-[480px] bg-black/50 border border-white/20 px-3 py-2 text-white font-mono"
+          />
+
+          <button
+            onClick={() => canSave && onSave({
+              id: `custom-${Date.now()}`,
+              name: name.trim(),
+              country: "Custom",
+              laps: 5,
+              waypoints: points,
+            })}
+            disabled={!canSave}
+            className="w-full max-w-[480px] px-6 py-4 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]"
+          >
+            Save & Race
+          </button>
+          {!canSave && points.length < 6 && (
+            <div className="text-xs text-white/50">Add at least {6 - points.length} more waypoint(s)</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MultiplayerEntry({ playerName, setPlayerName, onCreate, onJoin, onBack }: {
   playerName: string;
   setPlayerName: (n: string) => void;
@@ -1310,11 +1597,15 @@ function Lobby({ roomCode, isHost, players, track, lapsChoice, onPickLaps, onCha
   );
 }
 
-function TrackSelect({ trackId, career, mode, lapsChoice, onPickLaps, onPick, onBack, onStart }: {
+function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTracks, onCreate, onDeleteCustom, onPickLaps, onPick, onBack, onStart }: {
   trackId: string;
   career: CareerSave | null;
   mode: Mode;
   lapsChoice: 3 | 5 | 10;
+  allTracks: TrackDef[];
+  customTracks: TrackDef[];
+  onCreate: () => void;
+  onDeleteCustom: (id: string) => void;
   onPickLaps: (n: 3 | 5 | 10) => void;
   onPick: (id: string) => void;
   onBack: () => void;
@@ -1343,9 +1634,10 @@ function TrackSelect({ trackId, career, mode, lapsChoice, onPickLaps, onPick, on
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {TRACKS.map((t) => {
+          {allTracks.map((t) => {
             const selected = t.id === trackId;
             const result = career?.completed[t.id];
+            const isCustom = customTracks.some((c) => c.id === t.id);
             return (
               <button
                 key={t.id}
@@ -1356,15 +1648,33 @@ function TrackSelect({ trackId, career, mode, lapsChoice, onPickLaps, onPick, on
                   <div className="font-black text-lg">{t.name}</div>
                   <div className="text-white/50 text-xs uppercase">{t.country}</div>
                 </div>
-                <div className="text-white/50 text-xs mt-1">{t.laps} laps</div>
+                <div className="text-white/50 text-xs mt-1">
+                  {t.laps} laps {isCustom && <span className="text-blue-400 ml-1">• Custom</span>}
+                </div>
                 {result && (
                   <div className="mt-2 text-xs text-red-400 font-mono">
                     Best P{result.position} • {result.bestLap.toFixed(2)}s • +{result.points}pts
                   </div>
                 )}
+                {isCustom && (
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); onDeleteCustom(t.id); }}
+                    className="mt-2 inline-block text-[10px] text-white/40 hover:text-red-400 underline"
+                  >
+                    Delete
+                  </span>
+                )}
               </button>
             );
           })}
+          <button
+            onClick={onCreate}
+            className="p-4 border-2 border-dashed border-blue-400/50 hover:border-blue-400 bg-blue-500/5 text-blue-300 text-left"
+          >
+            <div className="font-black text-lg">+ Create a Track</div>
+            <div className="text-xs mt-1 opacity-70">Design your own circuit</div>
+          </button>
         </div>
 
         <button onClick={onStart} className="mt-8 w-full sm:w-auto px-10 py-4 bg-red-600 hover:bg-red-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(220,0,0,0.5)]">
