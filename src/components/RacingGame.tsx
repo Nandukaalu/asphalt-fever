@@ -602,10 +602,35 @@ export default function RacingGame() {
     // Player car
     const player = buildCar(driver);
     scene.add(player.group);
-    const startPos = curve.getPointAt(0.001);
-    const startTan = curve.getTangentAt(0.001).normalize();
-    const startHeading = Math.atan2(startTan.x, startTan.z);
-    player.group.position.copy(startPos);
+    // Grid placement helper — slot 0 is pole, behind start/finish, staggered L/R
+    const totalCurveLen = curve.getLength();
+    const GRID_LONG = 7.5;
+    const GRID_LAT = 3.2;
+    function gridSlot(slot: number) {
+      const row = Math.floor(slot / 2);
+      const side = slot % 2 === 0 ? 1 : -1;
+      const backDist = 5 + row * GRID_LONG;
+      let backT = 1 - backDist / totalCurveLen;
+      while (backT < 0) backT += 1;
+      const p = curve.getPointAt(backT);
+      const tg = curve.getTangentAt(backT).normalize();
+      const n = new THREE.Vector3(-tg.z, 0, tg.x);
+      return {
+        x: p.x + n.x * side * GRID_LAT,
+        z: p.z + n.z * side * GRID_LAT,
+        heading: Math.atan2(tg.x, tg.z),
+        t: backT,
+      };
+    }
+    const isMulti = mode === "multi";
+    let playerSlot = 4;
+    if (isMulti) {
+      const idx = lobbyPlayers.findIndex((p) => p.id === playerIdRef.current);
+      playerSlot = idx >= 0 ? idx : 0;
+    }
+    const pSlot = gridSlot(playerSlot);
+    const startHeading = pSlot.heading;
+    player.group.position.set(pSlot.x, 0, pSlot.z);
     player.group.rotation.y = startHeading;
 
     // AI cars (other drivers)
@@ -613,15 +638,19 @@ export default function RacingGame() {
     const MAX_SPEED_PREVIEW = 78;
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
     const ais: (AI & { driver: Driver; offset: number })[] = [];
-    const isMulti = mode === "multi";
     if (!isMulti) {
       const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
-      otherDrivers.forEach((d, i) => {
+      let next = 0;
+      otherDrivers.forEach((d) => {
+        if (next === playerSlot) next++;
+        const slot = next++;
+        const g = gridSlot(slot);
         const c = buildCar(d);
         scene.add(c.group);
-        const tStart = -0.004 - i * 0.005;
-        const lateral = (i % 2 === 0 ? 1 : -1) * (2 + (i % 4));
-        ais.push({ car: c, t: (tStart + 1) % 1, speed: AI_SPEED, driver: d, offset: lateral });
+        c.group.position.set(g.x, 0, g.z);
+        c.group.rotation.y = g.heading;
+        const lateral = (slot % 2 === 0 ? 1 : -1) * GRID_LAT;
+        ais.push({ car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral });
       });
     }
 
