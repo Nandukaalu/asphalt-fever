@@ -200,6 +200,7 @@ function writeSave(s: CareerSave) {
 export default function RacingGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, totalLaps: 3, lapTime: 0, bestLap: 0, position: 1 });
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [mode, setMode] = useState<Mode>("quick");
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
