@@ -64,6 +64,36 @@ const DRIVERS: Driver[] = [
   { id: "onyx", name: "Sam Carter", team: "Onyx Racing", primary: 0x0f172a, secondary: 0xfbbf24, number: 55 },
 ];
 
+// ---- Custom garage drivers (from /customize page) ----
+function hexToInt(hex: string, fallback: number): number {
+  if (!hex || typeof hex !== "string") return fallback;
+  const s = hex.replace("#", "");
+  const n = parseInt(s.length === 3 ? s.split("").map((c) => c + c).join("") : s, 16);
+  return Number.isFinite(n) ? n : fallback;
+}
+function loadCustomDrivers(): { drivers: Driver[]; activeId: string | null } {
+  if (typeof window === "undefined") return { drivers: [], activeId: null };
+  try {
+    const raw = localStorage.getItem("af-garage-v1");
+    if (!raw) return { drivers: [], activeId: null };
+    const g = JSON.parse(raw) as {
+      drivers: Array<{ id: string; profile: { name: string; number: number; outfit: string }; car: { bodyColor: string; style: string; neon: string } }>;
+      activeId: string;
+    };
+    const drivers: Driver[] = (g.drivers || []).map((d) => ({
+      id: `custom:${d.id}`,
+      name: d.profile?.name || "Custom",
+      team: `My Garage • ${d.car?.style ?? "Custom"}`,
+      primary: hexToInt(d.car?.bodyColor, 0xff6a1a),
+      secondary: hexToInt(d.car?.neon && d.car.neon !== "none" ? d.car.neon : d.profile?.outfit, 0xffffff),
+      number: Math.max(0, Math.min(99, Number(d.profile?.number ?? 7))),
+    }));
+    return { drivers, activeId: g.activeId ? `custom:${g.activeId}` : null };
+  } catch {
+    return { drivers: [], activeId: null };
+  }
+}
+
 // Hand-tuned waypoint loops inspired by real circuits (not actual layouts).
 const TRACKS: TrackDef[] = [
   {
@@ -203,6 +233,7 @@ export default function RacingGame() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [mode, setMode] = useState<Mode>("quick");
+  const [customDrivers, setCustomDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
   const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
@@ -233,8 +264,27 @@ export default function RacingGame() {
 
   useEffect(() => { setCareer(loadSave()); }, []);
   useEffect(() => { setCustomTracks(loadCustomTracks()); }, []);
+  useEffect(() => {
+    const apply = () => {
+      const { drivers, activeId } = loadCustomDrivers();
+      setCustomDrivers(drivers);
+      if (activeId && drivers.some((d) => d.id === activeId)) setDriverId(activeId);
+    };
+    apply();
+    const onStorage = (e: StorageEvent) => { if (e.key === "af-garage-v1") apply(); };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", apply);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", apply);
+    };
+  }, []);
 
-  const driver = useMemo(() => DRIVERS.find((d) => d.id === driverId)!, [driverId]);
+  const allDrivers = useMemo(() => [...customDrivers, ...DRIVERS], [customDrivers]);
+  const driver = useMemo(
+    () => allDrivers.find((d) => d.id === driverId) ?? allDrivers[0],
+    [allDrivers, driverId]
+  );
   const allTracks = useMemo(() => [...TRACKS, ...customTracks], [customTracks]);
   const track = useMemo(() => allTracks.find((t) => t.id === trackId) ?? TRACKS[0], [allTracks, trackId]);
 
@@ -1332,6 +1382,7 @@ export default function RacingGame() {
 
       {screen === "driver" && (
         <DriverSelect
+          drivers={allDrivers}
           driverId={driverId}
           onPick={(id) => { setDriverId(id); if (mode === "multi") updatePresence({ driverId: id }); }}
           onBack={() => setScreen("menu")}
@@ -1523,7 +1574,8 @@ function MainMenu({ career, onQuick, onCareer, onMulti, onReset }: {
   );
 }
 
-function DriverSelect({ driverId, onPick, onBack, onNext }: {
+function DriverSelect({ drivers, driverId, onPick, onBack, onNext }: {
+  drivers: Driver[];
   driverId: string;
   onPick: (id: string) => void;
   onBack: () => void;
@@ -1534,17 +1586,21 @@ function DriverSelect({ driverId, onPick, onBack, onNext }: {
       <div className="max-w-3xl mx-auto">
         <button onClick={onBack} className="text-white/60 hover:text-white text-xs uppercase tracking-widest mb-4">← Back</button>
         <h2 className="text-3xl sm:text-4xl font-black mb-1">Choose Your Driver</h2>
-        <p className="text-white/50 text-sm mb-6 uppercase tracking-widest">Select your seat for the season</p>
+        <p className="text-white/50 text-sm mb-6 uppercase tracking-widest">Your custom drivers appear first</p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {DRIVERS.map((d) => {
+          {drivers.map((d) => {
             const selected = d.id === driverId;
+            const isCustom = d.id.startsWith("custom:");
             return (
               <button
                 key={d.id}
                 onClick={() => onPick(d.id)}
-                className={`relative p-4 border-2 transition text-left ${selected ? "border-red-500 bg-red-500/10" : "border-white/20 hover:border-white/40 bg-black/40"}`}
+                className={`relative p-4 border-2 transition text-left ${selected ? "border-red-500 bg-red-500/10" : isCustom ? "border-cyan-400/60 bg-cyan-400/5 hover:border-cyan-300" : "border-white/20 hover:border-white/40 bg-black/40"}`}
               >
+                {isCustom && (
+                  <div className="absolute top-1 right-1 text-[9px] font-black tracking-widest text-cyan-300 bg-black/60 px-1.5 py-0.5 rounded">YOURS</div>
+                )}
                 <div className="h-14 rounded mb-3 flex items-center justify-center text-2xl font-black"
                   style={{ background: `#${d.primary.toString(16).padStart(6, "0")}`, color: `#${d.secondary.toString(16).padStart(6, "0")}` }}>
                   #{d.number}
