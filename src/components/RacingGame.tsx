@@ -1416,6 +1416,23 @@ export default function RacingGame() {
         remotesRef.current.forEach((rp, id) => {
           if (nowMs - rp.lastUpdate > 8000) { stale.push(id); return; }
           const car = ensureRemoteCar(rp);
+          // Lap tracking from incoming progress
+          let rl = remoteLap.get(id);
+          if (!rl) {
+            rl = { lap: 1, lapStart: raceStartAt, lastLap: 0, bestLap: 0, prevProg: rp.progress };
+            remoteLap.set(id, rl);
+          }
+          const newLap = Math.floor(rp.progress) + 1;
+          if (newLap > rl.lap) {
+            const lt = (now - rl.lapStart) / 1000;
+            if (lt > 1) { // sanity
+              rl.lastLap = lt;
+              if (rl.bestLap === 0 || lt < rl.bestLap) rl.bestLap = lt;
+            }
+            rl.lapStart = now;
+            rl.lap = newLap;
+          }
+          rl.prevProg = rp.progress;
           // Smooth interpolation toward last received pose
           car.group.position.x += (rp.x - car.group.position.x) * Math.min(1, dt * 12);
           car.group.position.z += (rp.z - car.group.position.z) * Math.min(1, dt * 12);
