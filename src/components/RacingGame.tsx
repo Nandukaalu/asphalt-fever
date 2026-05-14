@@ -1547,6 +1547,12 @@ export default function RacingGame() {
         });
       }
 
+      // Replay sampling (~10 Hz, capped)
+      if (now - lastReplaySample > 100 && replayFrames.length < 4000) {
+        lastReplaySample = now;
+        replayFrames.push({ t: now, x: carPos.x, z: carPos.z, h: heading, speed });
+      }
+
       renderer.render(scene, camera);
 
       if (raceFinished) {
