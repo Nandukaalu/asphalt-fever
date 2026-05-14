@@ -1453,6 +1453,63 @@ export default function RacingGame() {
       camera.fov += (targetFov - camera.fov) * 0.08;
       camera.updateProjectionMatrix();
 
+      // ---------- Weather + visual FX ----------
+      // Rain — fall + follow camera
+      if (rainPoints && rainPositions) {
+        const cx = camera.position.x, cz = camera.position.z;
+        const fall = 110 * dt * (W.rain > 1 ? 1.4 : 1);
+        for (let i = 0; i < rainPositions.length; i += 3) {
+          rainPositions[i + 1] -= fall;
+          if (rainPositions[i + 1] < 0) {
+            rainPositions[i + 1] = 80 + Math.random() * 20;
+            rainPositions[i + 0] = cx + (Math.random() - 0.5) * 240;
+            rainPositions[i + 2] = cz + (Math.random() - 0.5) * 240;
+          }
+        }
+        (rainPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      }
+
+      // Lightning
+      if (W.lightning) {
+        lightningTimer -= dt;
+        if (lightningTimer <= 0) {
+          lightningFlash = 1;
+          lightningTimer = 3 + Math.random() * 6;
+        }
+        if (lightningFlash > 0) {
+          lightningFlash = Math.max(0, lightningFlash - dt * 5);
+          lightningLight.intensity = lightningFlash * 4;
+        }
+      }
+
+      // Exhaust glow scales with throttle + speed
+      const accelInput = (keys["w"] || keys["arrowup"] || touchRef.current.accel) ? 1 : 0;
+      const exhaustT = accelInput * Math.min(1, Math.abs(speed) / MAX_SPEED + 0.2);
+      exhaustLight.intensity += (exhaustT * 5 - exhaustLight.intensity) * Math.min(1, dt * 8);
+      exhaustMat.opacity += (exhaustT * 0.85 - exhaustMat.opacity) * Math.min(1, dt * 8);
+      exhaustMesh.scale.setScalar(0.7 + exhaustT * 0.6 + Math.random() * 0.05);
+
+      // Tire smoke when drifting / handbraking at speed
+      const drifting =
+        (Math.abs(lateralVel) > 5 || keys[" "] || touchRef.current.handbrake) &&
+        Math.abs(speed) > 12;
+      if (drifting) {
+        // spawn at rear wheels
+        const back = new THREE.Vector3(0, 0, -1.3).applyEuler(new THREE.Euler(0, heading, 0));
+        const sideR = new THREE.Vector3(0.8, 0, 0).applyEuler(new THREE.Euler(0, heading, 0));
+        spawnSmoke(carPos.x + back.x + sideR.x, carPos.z + back.z + sideR.z);
+        spawnSmoke(carPos.x + back.x - sideR.x, carPos.z + back.z - sideR.z);
+      }
+      for (const p of smokes) {
+        if (!p.mesh.visible) continue;
+        p.life -= dt;
+        if (p.life <= 0) { p.mesh.visible = false; continue; }
+        const k = p.life / p.maxLife;
+        (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75 * k;
+        p.mesh.scale.x += dt * 1.2;
+        p.mesh.scale.y += dt * 1.2;
+      }
+
       // HUD
       hudTick++;
       if (hudTick % 5 === 0) {
