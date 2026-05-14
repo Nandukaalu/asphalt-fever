@@ -1223,6 +1223,13 @@ export default function RacingGame() {
     const replayFrames: ReplayFrame[] = [];
     let lastReplaySample = 0;
 
+    // Lap tracking for remote multiplayer racers (by player id)
+    type RemoteLap = { lap: number; lapStart: number; lastLap: number; bestLap: number; prevProg: number };
+    const remoteLap = new Map<string, RemoteLap>();
+
+    // Estimated lap time used for converting progress-gap into seconds
+    const lapTimeEst = curveLength(curve) / AI_SPEED;
+
     const animate = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
