@@ -976,6 +976,83 @@ export default function RacingGame() {
     // Player car
     const player = buildCar(driver);
     scene.add(player.group);
+
+    // ----- Headlights (when night) -----
+    const headlightTarget = new THREE.Object3D();
+    headlightTarget.position.set(0, 0, 30);
+    player.group.add(headlightTarget);
+    const headlights: THREE.SpotLight[] = [];
+    if (W.night) {
+      for (const x of [-0.35, 0.35]) {
+        const sl = new THREE.SpotLight(0xfff4d0, 4.5, 90, Math.PI / 7, 0.55, 1.2);
+        sl.position.set(x, 0.45, 2.1);
+        sl.target = headlightTarget;
+        player.group.add(sl);
+        headlights.push(sl);
+      }
+    }
+
+    // ----- Exhaust glow (point light + emissive plane) -----
+    const exhaustLight = new THREE.PointLight(0xff7a1a, 0, 6, 2);
+    exhaustLight.position.set(0, 0.45, -1.85);
+    player.group.add(exhaustLight);
+    const exhaustMat = new THREE.MeshBasicMaterial({
+      color: 0xff8a3d, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const exhaustMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), exhaustMat);
+    exhaustMesh.position.set(0, 0.42, -1.85);
+    player.group.add(exhaustMesh);
+
+    // ----- Rain particles -----
+    let rainPoints: THREE.Points | null = null;
+    let rainPositions: Float32Array | null = null;
+    const RAIN_COUNT = W.rain > 0 ? Math.floor(1500 * Math.min(W.rain, 1.5)) : 0;
+    if (RAIN_COUNT > 0) {
+      rainPositions = new Float32Array(RAIN_COUNT * 3);
+      for (let i = 0; i < RAIN_COUNT; i++) {
+        rainPositions[i * 3 + 0] = (Math.random() - 0.5) * 280;
+        rainPositions[i * 3 + 1] = Math.random() * 90;
+        rainPositions[i * 3 + 2] = (Math.random() - 0.5) * 280;
+      }
+      const rg = new THREE.BufferGeometry();
+      rg.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
+      const rm = new THREE.PointsMaterial({
+        color: 0xb8d8ff, size: 0.55, transparent: true,
+        opacity: 0.55, depthWrite: false,
+      });
+      rainPoints = new THREE.Points(rg, rm);
+      scene.add(rainPoints);
+    }
+
+    // ----- Tire smoke pool -----
+    const SMOKE_COUNT = 80;
+    const smokeMat = new THREE.MeshBasicMaterial({
+      color: 0xeeeeee, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.NormalBlending,
+    });
+    const smokeGeo = new THREE.PlaneGeometry(0.9, 0.9);
+    type Puff = { mesh: THREE.Mesh; life: number; maxLife: number };
+    const smokes: Puff[] = [];
+    for (let i = 0; i < SMOKE_COUNT; i++) {
+      const m = new THREE.Mesh(smokeGeo, smokeMat.clone());
+      m.rotation.x = -Math.PI / 2;
+      m.visible = false;
+      scene.add(m);
+      smokes.push({ mesh: m, life: 0, maxLife: 1 });
+    }
+    let smokeIdx = 0;
+    function spawnSmoke(x: number, z: number) {
+      const p = smokes[smokeIdx++ % SMOKE_COUNT];
+      p.mesh.position.set(x, 0.05, z);
+      p.mesh.scale.setScalar(0.6 + Math.random() * 0.4);
+      p.life = 0.8 + Math.random() * 0.4;
+      p.maxLife = p.life;
+      p.mesh.visible = true;
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75;
+    }
+
+    // Wet road darkening overlay (simple ambient tint via fog already; bump exposure dn if wet)
     // Grid placement helper — slot 0 is pole, behind start/finish, staggered L/R
     const totalCurveLen = curve.getLength();
     const GRID_LONG = 7.5;
