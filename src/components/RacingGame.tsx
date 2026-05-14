@@ -340,6 +340,8 @@ export default function RacingGame() {
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
   const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
+  const [weatherId, setWeatherId] = useState<WeatherId>(() => loadWeather());
+  useEffect(() => { try { localStorage.setItem(WEATHER_KEY, weatherId); } catch {} }, [weatherId]);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
