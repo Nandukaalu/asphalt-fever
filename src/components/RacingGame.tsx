@@ -1594,6 +1594,71 @@ export default function RacingGame() {
           bestLap,
           position,
         });
+
+        // -------- Live timing tower --------
+        const toHex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
+        type Row = {
+          id: string; name: string; team?: string; color: string; number?: number;
+          progress: number; lap: number; lastLap?: number; bestLap?: number; isPlayer: boolean;
+        };
+        const rows: Row[] = [];
+        rows.push({
+          id: driver.id, name: playerName || driver.name, team: driver.team,
+          color: toHex(driver.primary), number: driver.number,
+          progress: raceProgress, lap: Math.min(lap, totalLaps),
+          lastLap: undefined, bestLap: bestLap > 0 ? bestLap : undefined,
+          isPlayer: true,
+        });
+        if (isMulti) {
+          remotesRef.current.forEach((rp, id) => {
+            const drv = DRIVERS.find((d) => d.id === rp.driverId) ?? DRIVERS[0];
+            const rl = remoteLap.get(id);
+            rows.push({
+              id: `r:${id}`, name: rp.name || drv.name, team: drv.team,
+              color: toHex(drv.primary), number: drv.number,
+              progress: rp.progress,
+              lap: Math.min(totalLaps, rl?.lap ?? 1),
+              lastLap: rl && rl.lastLap > 0 ? rl.lastLap : undefined,
+              bestLap: rl && rl.bestLap > 0 ? rl.bestLap : undefined,
+              isPlayer: false,
+            });
+          });
+        } else {
+          ais.forEach((ai) => {
+            const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+            rows.push({
+              id: ai.driver.id, name: ai.driver.name, team: ai.driver.team,
+              color: toHex(ai.driver.primary), number: ai.driver.number,
+              progress: aiLapEst + ai.t,
+              lap: Math.min(totalLaps, ai.lap),
+              lastLap: ai.lastLap > 0 ? ai.lastLap : undefined,
+              bestLap: ai.bestLap > 0 ? ai.bestLap : undefined,
+              isPlayer: false,
+            });
+          });
+        }
+        rows.sort((a, b) => b.progress - a.progress);
+        const leaderProg = rows[0]?.progress ?? 0;
+        // Fastest lap across the field
+        let fl = 0;
+        rows.forEach((r) => { if (r.bestLap && (fl === 0 || r.bestLap < fl)) fl = r.bestLap; });
+        const entries: LiveEntry[] = rows.map((r, i) => {
+          const dProg = leaderProg - r.progress;
+          let gap = "—";
+          if (i > 0) {
+            const lapsBehind = Math.floor(dProg);
+            if (lapsBehind >= 1) gap = `+${lapsBehind} LAP`;
+            else gap = `+${(dProg * lapTimeEst).toFixed(2)}`;
+          }
+          return {
+            id: r.id, name: r.name, team: r.team, color: r.color, number: r.number,
+            position: i + 1, lap: r.lap, lastLap: r.lastLap, bestLap: r.bestLap,
+            gap, isPlayer: r.isPlayer,
+            isFastestLap: !!(fl > 0 && r.bestLap === fl),
+          };
+        });
+        setLiveBoard(entries);
+        setFastestLapTime(fl);
       }
 
       // Replay sampling (~10 Hz, capped)
