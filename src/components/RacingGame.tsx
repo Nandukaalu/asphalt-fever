@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import DailyHub from "./DailyHub";
+import { recordRace } from "@/lib/dailyRewards";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -345,6 +347,7 @@ export default function RacingGame() {
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
+  const [showDaily, setShowDaily] = useState(false);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
   // -------- Multiplayer state --------
@@ -1190,6 +1193,10 @@ export default function RacingGame() {
     let lastCountdownShown = 99;
     setCountdown(3);
 
+    // Session stats for daily challenges
+    let sessTopSpeedKmh = 0;
+    let sessDriftDist = 0;
+
     const animate = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -1499,6 +1506,8 @@ export default function RacingGame() {
         const sideR = new THREE.Vector3(0.8, 0, 0).applyEuler(new THREE.Euler(0, heading, 0));
         spawnSmoke(carPos.x + back.x + sideR.x, carPos.z + back.z + sideR.z);
         spawnSmoke(carPos.x + back.x - sideR.x, carPos.z + back.z - sideR.z);
+        // Track drift distance in meters (m/s * dt) — physics speed is roughly m/s scale
+        sessDriftDist += Math.abs(speed) * dt;
       }
       for (const p of smokes) {
         if (!p.mesh.visible) continue;
@@ -1515,6 +1524,7 @@ export default function RacingGame() {
       if (hudTick % 5 === 0) {
         const kmh = Math.abs(speed) * 3.6 * 1.6;
         const gear = Math.max(1, Math.min(8, Math.floor((Math.abs(speed) / MAX_SPEED) * 8) + 1));
+        if (kmh > sessTopSpeedKmh) sessTopSpeedKmh = kmh;
         setHud({
           speed: Math.round(kmh),
           gear,
@@ -1531,6 +1541,15 @@ export default function RacingGame() {
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         const points = POINTS[position - 1] ?? 0;
+        // Record daily-challenge progress for this race
+        try {
+          recordRace({
+            won: position === 1,
+            topSpeedKmh: sessTopSpeedKmh,
+            raceTimeSec: Math.max(0, (now - raceStartAt) / 1000),
+            driftDistanceM: sessDriftDist,
+          });
+        } catch {}
         // Compute final order of every car on the grid
         const standingsList: { id: string; prog: number }[] = [
           { id: driver.id, prog: raceProgress + 0.0001 },
@@ -1597,9 +1616,12 @@ export default function RacingGame() {
           onQuick={() => { setMode("quick"); setScreen("driver"); }}
           onCareer={() => { setMode("career"); setScreen("driver"); }}
           onMulti={() => { setMode("multi"); setScreen("multi"); }}
+          onDaily={() => setShowDaily(true)}
           onReset={() => { try { localStorage.removeItem(SAVE_KEY); } catch {}; setCareer(null); }}
         />
       )}
+
+      {showDaily && <DailyHub onClose={() => setShowDaily(false)} />}
 
       {screen === "multi" && (
         <MultiplayerEntry
@@ -1773,11 +1795,12 @@ function curveLength(curve: THREE.CatmullRomCurve3) {
 }
 
 // ---------------- UI Subcomponents ----------------
-function MainMenu({ career, onQuick, onCareer, onMulti, onReset }: {
+function MainMenu({ career, onQuick, onCareer, onMulti, onDaily, onReset }: {
   career: CareerSave | null;
   onQuick: () => void;
   onCareer: () => void;
   onMulti: () => void;
+  onDaily: () => void;
   onReset: () => void;
 }) {
   return (
@@ -1798,6 +1821,9 @@ function MainMenu({ career, onQuick, onCareer, onMulti, onReset }: {
         </button>
         <button onClick={onMulti} className="px-6 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(0,80,220,0.45)]">
           Multiplayer
+        </button>
+        <button onClick={onDaily} className="px-6 py-4 bg-yellow-500/90 hover:bg-yellow-400 text-black font-black tracking-widest uppercase shadow-[0_0_40px_rgba(250,200,0,0.4)]">
+          Daily Hub 🎁
         </button>
         {career && (
           <div className="mt-4 p-3 border border-white/10 bg-black/30 text-xs">
