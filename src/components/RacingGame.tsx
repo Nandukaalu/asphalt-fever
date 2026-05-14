@@ -1204,6 +1204,10 @@ export default function RacingGame() {
     let sessTopSpeedKmh = 0;
     let sessDriftDist = 0;
 
+    // Replay capture: sample at ~10 Hz
+    const replayFrames: ReplayFrame[] = [];
+    let lastReplaySample = 0;
+
     const animate = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
