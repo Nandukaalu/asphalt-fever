@@ -1642,6 +1642,8 @@ export default function RacingGame() {
       )}
 
       {screen === "track" && (
+        <>
+        <WeatherSelect weatherId={weatherId} onPick={setWeatherId} />
         <TrackSelect
           trackId={trackId}
           career={career}
@@ -1664,6 +1666,7 @@ export default function RacingGame() {
             else { setResult(null); setScreen("racing"); }
           }}
         />
+        </>
       )}
 
       {screen === "editor" && (
