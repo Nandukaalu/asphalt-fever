@@ -7,6 +7,7 @@ import { recordRace } from "@/lib/dailyRewards";
 import Leaderboard from "./Leaderboard";
 import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
 import { submitLeaderboard } from "@/lib/leaderboard";
+import LiveTiming, { type LiveEntry } from "./LiveTiming";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -338,6 +339,8 @@ function writeSave(s: CareerSave) {
 export default function RacingGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, totalLaps: 3, lapTime: 0, bestLap: 0, position: 1 });
+  const [liveBoard, setLiveBoard] = useState<LiveEntry[]>([]);
+  const [fastestLapTime, setFastestLapTime] = useState<number>(0);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [mode, setMode] = useState<Mode>("quick");
@@ -1095,7 +1098,16 @@ export default function RacingGame() {
     player.group.rotation.y = startHeading;
 
     // AI cars (other drivers)
-    type AI = { car: ReturnType<typeof buildCar>; t: number; speed: number };
+    type AI = {
+      car: ReturnType<typeof buildCar>;
+      t: number;
+      speed: number;
+      lap: number;
+      lapStart: number;
+      lastLap: number;
+      bestLap: number;
+      prevT: number;
+    };
     const MAX_SPEED_PREVIEW = 78;
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
     const ais: (AI & { driver: Driver; offset: number })[] = [];
@@ -1111,7 +1123,10 @@ export default function RacingGame() {
         c.group.position.set(g.x, 0, g.z);
         c.group.rotation.y = g.heading;
         const lateral = (slot % 2 === 0 ? 1 : -1) * GRID_LAT;
-        ais.push({ car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral });
+        ais.push({
+          car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral,
+          lap: 1, lapStart: 0, lastLap: 0, bestLap: 0, prevT: g.t,
+        });
       });
     }
 
@@ -1207,6 +1222,13 @@ export default function RacingGame() {
     // Replay capture: sample at ~10 Hz
     const replayFrames: ReplayFrame[] = [];
     let lastReplaySample = 0;
+
+    // Lap tracking for remote multiplayer racers (by player id)
+    type RemoteLap = { lap: number; lapStart: number; lastLap: number; bestLap: number; prevProg: number };
+    const remoteLap = new Map<string, RemoteLap>();
+
+    // Estimated lap time used for converting progress-gap into seconds
+    const lapTimeEst = curveLength(curve) / AI_SPEED;
 
     const animate = () => {
       const now = performance.now();
@@ -1348,8 +1370,18 @@ export default function RacingGame() {
       // ---------- AI ----------
       const cLen = curveLength(curve);
       if (!isMulti) ais.forEach((ai) => {
+        if (ai.lapStart === 0) ai.lapStart = raceStartAt;
         ai.t += (ai.speed * dt) / cLen;
         if (ai.t >= 1) ai.t -= 1;
+        // Lap wrap detection (t crosses 1->0)
+        if (ai.prevT > 0.9 && ai.t < 0.1) {
+          const lt = (now - ai.lapStart) / 1000;
+          ai.lastLap = lt;
+          if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
+          ai.lapStart = now;
+          ai.lap++;
+        }
+        ai.prevT = ai.t;
         const ap = curve.getPointAt(ai.t);
         const atan = curve.getTangentAt(ai.t).normalize();
         const an = new THREE.Vector3(-atan.z, 0, atan.x);
@@ -1384,6 +1416,23 @@ export default function RacingGame() {
         remotesRef.current.forEach((rp, id) => {
           if (nowMs - rp.lastUpdate > 8000) { stale.push(id); return; }
           const car = ensureRemoteCar(rp);
+          // Lap tracking from incoming progress
+          let rl = remoteLap.get(id);
+          if (!rl) {
+            rl = { lap: 1, lapStart: raceStartAt, lastLap: 0, bestLap: 0, prevProg: rp.progress };
+            remoteLap.set(id, rl);
+          }
+          const newLap = Math.floor(rp.progress) + 1;
+          if (newLap > rl.lap) {
+            const lt = (now - rl.lapStart) / 1000;
+            if (lt > 1) { // sanity
+              rl.lastLap = lt;
+              if (rl.bestLap === 0 || lt < rl.bestLap) rl.bestLap = lt;
+            }
+            rl.lapStart = now;
+            rl.lap = newLap;
+          }
+          rl.prevProg = rp.progress;
           // Smooth interpolation toward last received pose
           car.group.position.x += (rp.x - car.group.position.x) * Math.min(1, dt * 12);
           car.group.position.z += (rp.z - car.group.position.z) * Math.min(1, dt * 12);
@@ -1545,6 +1594,71 @@ export default function RacingGame() {
           bestLap,
           position,
         });
+
+        // -------- Live timing tower --------
+        const toHex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
+        type Row = {
+          id: string; name: string; team?: string; color: string; number?: number;
+          progress: number; lap: number; lastLap?: number; bestLap?: number; isPlayer: boolean;
+        };
+        const rows: Row[] = [];
+        rows.push({
+          id: driver.id, name: playerName || driver.name, team: driver.team,
+          color: toHex(driver.primary), number: driver.number,
+          progress: raceProgress, lap: Math.min(lap, totalLaps),
+          lastLap: undefined, bestLap: bestLap > 0 ? bestLap : undefined,
+          isPlayer: true,
+        });
+        if (isMulti) {
+          remotesRef.current.forEach((rp, id) => {
+            const drv = DRIVERS.find((d) => d.id === rp.driverId) ?? DRIVERS[0];
+            const rl = remoteLap.get(id);
+            rows.push({
+              id: `r:${id}`, name: rp.name || drv.name, team: drv.team,
+              color: toHex(drv.primary), number: drv.number,
+              progress: rp.progress,
+              lap: Math.min(totalLaps, rl?.lap ?? 1),
+              lastLap: rl && rl.lastLap > 0 ? rl.lastLap : undefined,
+              bestLap: rl && rl.bestLap > 0 ? rl.bestLap : undefined,
+              isPlayer: false,
+            });
+          });
+        } else {
+          ais.forEach((ai) => {
+            const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+            rows.push({
+              id: ai.driver.id, name: ai.driver.name, team: ai.driver.team,
+              color: toHex(ai.driver.primary), number: ai.driver.number,
+              progress: aiLapEst + ai.t,
+              lap: Math.min(totalLaps, ai.lap),
+              lastLap: ai.lastLap > 0 ? ai.lastLap : undefined,
+              bestLap: ai.bestLap > 0 ? ai.bestLap : undefined,
+              isPlayer: false,
+            });
+          });
+        }
+        rows.sort((a, b) => b.progress - a.progress);
+        const leaderProg = rows[0]?.progress ?? 0;
+        // Fastest lap across the field
+        let fl = 0;
+        rows.forEach((r) => { if (r.bestLap && (fl === 0 || r.bestLap < fl)) fl = r.bestLap; });
+        const entries: LiveEntry[] = rows.map((r, i) => {
+          const dProg = leaderProg - r.progress;
+          let gap = "—";
+          if (i > 0) {
+            const lapsBehind = Math.floor(dProg);
+            if (lapsBehind >= 1) gap = `+${lapsBehind} LAP`;
+            else gap = `+${(dProg * lapTimeEst).toFixed(2)}`;
+          }
+          return {
+            id: r.id, name: r.name, team: r.team, color: r.color, number: r.number,
+            position: i + 1, lap: r.lap, lastLap: r.lastLap, bestLap: r.bestLap,
+            gap, isPlayer: r.isPlayer,
+            isFastestLap: !!(fl > 0 && r.bestLap === fl),
+          };
+        });
+        setLiveBoard(entries);
+        setFastestLapTime(fl);
       }
 
       // Replay sampling (~10 Hz, capped)
@@ -1774,7 +1888,7 @@ export default function RacingGame() {
             <div className="text-xl font-bold text-red-400">P{hud.position}</div>
           </div>
 
-          <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none">
+          <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none hidden">
             <div className="text-[10px] uppercase tracking-widest text-white/50">Current</div>
             <div className="text-xl font-bold tabular-nums">{hud.lapTime.toFixed(2)}</div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Best</div>
@@ -1784,6 +1898,8 @@ export default function RacingGame() {
           </div>
 
           <Speedometer speed={hud.speed} gear={hud.gear} />
+
+          <LiveTiming entries={liveBoard} totalLaps={hud.totalLaps} fastestLap={fastestLapTime} />
 
           <button
             onClick={() => setScreen("menu")}
