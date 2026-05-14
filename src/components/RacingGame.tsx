@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import DailyHub from "./DailyHub";
 import { recordRace } from "@/lib/dailyRewards";
+import Leaderboard from "./Leaderboard";
+import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
+import { submitLeaderboard } from "@/lib/leaderboard";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -348,6 +351,10 @@ export default function RacingGame() {
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
   const [showDaily, setShowDaily] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [replayData, setReplayData] = useState<ReplayData | null>(null);
+  const [showReplay, setShowReplay] = useState(false);
+  const lastReplayFramesRef = useRef<ReplayFrame[]>([]);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
   // -------- Multiplayer state --------
