@@ -1888,7 +1888,7 @@ export default function RacingGame() {
             <div className="text-xl font-bold text-red-400">P{hud.position}</div>
           </div>
 
-          <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none">
+          <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none hidden">
             <div className="text-[10px] uppercase tracking-widest text-white/50">Current</div>
             <div className="text-xl font-bold tabular-nums">{hud.lapTime.toFixed(2)}</div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Best</div>
