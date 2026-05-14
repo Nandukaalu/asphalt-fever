@@ -1524,6 +1524,7 @@ export default function RacingGame() {
       if (hudTick % 5 === 0) {
         const kmh = Math.abs(speed) * 3.6 * 1.6;
         const gear = Math.max(1, Math.min(8, Math.floor((Math.abs(speed) / MAX_SPEED) * 8) + 1));
+        if (kmh > sessTopSpeedKmh) sessTopSpeedKmh = kmh;
         setHud({
           speed: Math.round(kmh),
           gear,
