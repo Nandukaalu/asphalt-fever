@@ -7,6 +7,7 @@ import { recordRace } from "@/lib/dailyRewards";
 import Leaderboard from "./Leaderboard";
 import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
 import { submitLeaderboard } from "@/lib/leaderboard";
+import LiveTiming, { type LiveEntry } from "./LiveTiming";
 
 // ---------------- Types ----------------
 type Driver = {
