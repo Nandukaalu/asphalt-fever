@@ -1899,6 +1899,8 @@ export default function RacingGame() {
 
           <Speedometer speed={hud.speed} gear={hud.gear} />
 
+          <LiveTiming entries={liveBoard} totalLaps={hud.totalLaps} fastestLap={fastestLapTime} />
+
           <button
             onClick={() => setScreen("menu")}
             className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 bg-black/50 backdrop-blur text-white text-xs uppercase tracking-widest border border-white/20 hover:bg-black/70"
