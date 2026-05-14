@@ -1370,8 +1370,18 @@ export default function RacingGame() {
       // ---------- AI ----------
       const cLen = curveLength(curve);
       if (!isMulti) ais.forEach((ai) => {
+        if (ai.lapStart === 0) ai.lapStart = raceStartAt;
         ai.t += (ai.speed * dt) / cLen;
         if (ai.t >= 1) ai.t -= 1;
+        // Lap wrap detection (t crosses 1->0)
+        if (ai.prevT > 0.9 && ai.t < 0.1) {
+          const lt = (now - ai.lapStart) / 1000;
+          ai.lastLap = lt;
+          if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
+          ai.lapStart = now;
+          ai.lap++;
+        }
+        ai.prevT = ai.t;
         const ap = curve.getPointAt(ai.t);
         const atan = curve.getTangentAt(ai.t).normalize();
         const an = new THREE.Vector3(-atan.z, 0, atan.x);
