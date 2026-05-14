@@ -64,6 +64,109 @@ const DRIVERS: Driver[] = [
   { id: "onyx", name: "Sam Carter", team: "Onyx Racing", primary: 0x0f172a, secondary: 0xfbbf24, number: 55 },
 ];
 
+// ---------------- Weather ----------------
+export type WeatherId =
+  | "clear-night"
+  | "rainy-night"
+  | "foggy-night"
+  | "sunset"
+  | "thunderstorm"
+  | "cloudy";
+
+type WeatherDef = {
+  id: WeatherId;
+  label: string;
+  blurb: string;
+  icon: string;
+  // sky gradient stops (top -> bottom)
+  sky: string[];
+  starDensity: number; // 0..1
+  fog: { color: number; density: number };
+  hemi: { sky: number; ground: number; intensity: number };
+  sun: { color: number; intensity: number; pos: [number, number, number] };
+  rim: { color: number; intensity: number };
+  exposure: number;
+  rain: number; // 0..1 droplet density
+  lightning: boolean;
+  wet: boolean;
+  night: boolean; // headlights on
+};
+
+export const WEATHERS: WeatherDef[] = [
+  {
+    id: "clear-night", label: "Clear Night", blurb: "Crisp stars, neon city",
+    icon: "✦",
+    sky: ["#02030a", "#0a0a26", "#1a1452", "#2d1a6e", "#48227a", "#6a2da3"],
+    starDensity: 1,
+    fog: { color: 0x0a0820, density: 0.0012 },
+    hemi: { sky: 0x6a4adf, ground: 0x0a0820, intensity: 0.45 },
+    sun: { color: 0x9b6dff, intensity: 0.55, pos: [200, 220, -180] },
+    rim: { color: 0x22d3ee, intensity: 0.7 },
+    exposure: 1.0, rain: 0, lightning: false, wet: false, night: true,
+  },
+  {
+    id: "rainy-night", label: "Rainy Night", blurb: "Wet asphalt, falling rain",
+    icon: "🌧",
+    sky: ["#020308", "#06081a", "#0d1430", "#1a2147", "#28305c", "#3a4470"],
+    starDensity: 0.1,
+    fog: { color: 0x0a1020, density: 0.006 },
+    hemi: { sky: 0x4a6aa0, ground: 0x05080f, intensity: 0.35 },
+    sun: { color: 0x6080b0, intensity: 0.3, pos: [-150, 250, -200] },
+    rim: { color: 0x40b8ff, intensity: 0.55 },
+    exposure: 0.85, rain: 1, lightning: false, wet: true, night: true,
+  },
+  {
+    id: "foggy-night", label: "Foggy Night", blurb: "Low visibility haze",
+    icon: "🌫",
+    sky: ["#0a0a14", "#15151f", "#22222e", "#2e2e3c", "#3a3a4a", "#444454"],
+    starDensity: 0.15,
+    fog: { color: 0x2a2a38, density: 0.013 },
+    hemi: { sky: 0x6f7a92, ground: 0x1a1a24, intensity: 0.55 },
+    sun: { color: 0x8090a8, intensity: 0.4, pos: [100, 200, 150] },
+    rim: { color: 0x90c0ff, intensity: 0.4 },
+    exposure: 0.95, rain: 0, lightning: false, wet: false, night: true,
+  },
+  {
+    id: "sunset", label: "Sunset", blurb: "Golden hour at the strip",
+    icon: "☀",
+    sky: ["#0d0820", "#33124a", "#7a1f5c", "#d63b6a", "#ff8a3d", "#ffd089"],
+    starDensity: 0.2,
+    fog: { color: 0xff8a4a, density: 0.0014 },
+    hemi: { sky: 0xff8a5a, ground: 0x4a1a3a, intensity: 0.7 },
+    sun: { color: 0xffb070, intensity: 1.4, pos: [280, 180, -240] },
+    rim: { color: 0xff66cc, intensity: 0.55 },
+    exposure: 1.15, rain: 0, lightning: false, wet: false, night: false,
+  },
+  {
+    id: "thunderstorm", label: "Thunderstorm", blurb: "Heavy rain & lightning",
+    icon: "⚡",
+    sky: ["#01020a", "#040820", "#091230", "#101a40", "#162250", "#1f2c60"],
+    starDensity: 0,
+    fog: { color: 0x070b1c, density: 0.009 },
+    hemi: { sky: 0x3a4870, ground: 0x040614, intensity: 0.3 },
+    sun: { color: 0x4060a0, intensity: 0.25, pos: [-200, 300, -100] },
+    rim: { color: 0x60a0ff, intensity: 0.4 },
+    exposure: 0.8, rain: 1.4, lightning: true, wet: true, night: true,
+  },
+  {
+    id: "cloudy", label: "Cloudy", blurb: "Overcast atmosphere",
+    icon: "☁",
+    sky: ["#1a1f2e", "#2a3142", "#3a4256", "#4a5268", "#5a637a", "#6c768e"],
+    starDensity: 0,
+    fog: { color: 0x4a5268, density: 0.0035 },
+    hemi: { sky: 0x9aa8c0, ground: 0x2a3040, intensity: 0.85 },
+    sun: { color: 0xc0c8d8, intensity: 0.7, pos: [180, 260, 120] },
+    rim: { color: 0xa0b4d0, intensity: 0.35 },
+    exposure: 1.0, rain: 0, lightning: false, wet: false, night: false,
+  },
+];
+const WEATHER_KEY = "af-weather-v1";
+function loadWeather(): WeatherId {
+  if (typeof window === "undefined") return "clear-night";
+  const v = localStorage.getItem(WEATHER_KEY) as WeatherId | null;
+  return WEATHERS.find((w) => w.id === v)?.id ?? "clear-night";
+}
+
 // ---- Custom garage drivers (from /customize page) ----
 function hexToInt(hex: string, fallback: number): number {
   if (!hex || typeof hex !== "string") return fallback;
@@ -237,6 +340,8 @@ export default function RacingGame() {
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
   const [trackId, setTrackId] = useState<string>(TRACKS[0].id);
   const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
+  const [weatherId, setWeatherId] = useState<WeatherId>(() => loadWeather());
+  useEffect(() => { try { localStorage.setItem(WEATHER_KEY, weatherId); } catch {} }, [weatherId]);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
@@ -399,25 +504,23 @@ export default function RacingGame() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    const W = WEATHERS.find((w) => w.id === weatherId) ?? WEATHERS[0];
+    renderer.toneMappingExposure = W.exposure;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    // Cyberpunk sunset → deep night gradient sky
+    // Weather-driven sky gradient
     const skyCanvas = document.createElement("canvas");
     skyCanvas.width = 8; skyCanvas.height = 512;
     const sctx0 = skyCanvas.getContext("2d")!;
     const grd = sctx0.createLinearGradient(0, 0, 0, 512);
-    grd.addColorStop(0.00, "#05030f");
-    grd.addColorStop(0.35, "#1a0a3a");
-    grd.addColorStop(0.62, "#5b1a6a");
-    grd.addColorStop(0.78, "#d63b6a");
-    grd.addColorStop(0.90, "#ff8a3d");
-    grd.addColorStop(1.00, "#ffd089");
+    const stops = W.sky;
+    stops.forEach((c, i) => grd.addColorStop(i / (stops.length - 1), c));
     sctx0.fillStyle = grd;
     sctx0.fillRect(0, 0, 8, 512);
-    // Stars
-    for (let i = 0; i < 90; i++) {
+    // Stars (weather-scaled)
+    const starCount = Math.floor(110 * W.starDensity);
+    for (let i = 0; i < starCount; i++) {
       const y = Math.random() * 200;
       sctx0.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.7})`;
       sctx0.fillRect(Math.random() * 8, y, 1, 1);
@@ -429,14 +532,14 @@ export default function RacingGame() {
       new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false }),
     );
     scene.add(skyDome);
-    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.0018);
+    scene.fog = new THREE.FogExp2(W.fog.color, W.fog.density);
 
     const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 3000);
 
-    const hemi = new THREE.HemisphereLight(0xff6ad5, 0x1a0a3a, 0.55);
+    const hemi = new THREE.HemisphereLight(W.hemi.sky, W.hemi.ground, W.hemi.intensity);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffb070, 1.2);
-    sun.position.set(280, 180, -240);
+    const sun = new THREE.DirectionalLight(W.sun.color, W.sun.intensity);
+    sun.position.set(W.sun.pos[0], W.sun.pos[1], W.sun.pos[2]);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left = -300;
@@ -445,10 +548,17 @@ export default function RacingGame() {
     sun.shadow.camera.bottom = -300;
     sun.shadow.camera.far = 800;
     scene.add(sun);
-    // Cool rim light for cyberpunk vibe
-    const rim = new THREE.DirectionalLight(0x22d3ee, 0.5);
+    // Cool rim light
+    const rim = new THREE.DirectionalLight(W.rim.color, W.rim.intensity);
     rim.position.set(-200, 120, 200);
     scene.add(rim);
+
+    // Lightning flashes (thunderstorm)
+    const lightningLight = new THREE.DirectionalLight(0xeaf6ff, 0);
+    lightningLight.position.set(0, 400, 0);
+    scene.add(lightningLight);
+    let lightningTimer = 2 + Math.random() * 4;
+    let lightningFlash = 0;
 
     // ---------- Futuristic environment (updaters tick each frame) ----------
     const envUpdaters: ((t: number) => void)[] = [];
@@ -866,6 +976,83 @@ export default function RacingGame() {
     // Player car
     const player = buildCar(driver);
     scene.add(player.group);
+
+    // ----- Headlights (when night) -----
+    const headlightTarget = new THREE.Object3D();
+    headlightTarget.position.set(0, 0, 30);
+    player.group.add(headlightTarget);
+    const headlights: THREE.SpotLight[] = [];
+    if (W.night) {
+      for (const x of [-0.35, 0.35]) {
+        const sl = new THREE.SpotLight(0xfff4d0, 4.5, 90, Math.PI / 7, 0.55, 1.2);
+        sl.position.set(x, 0.45, 2.1);
+        sl.target = headlightTarget;
+        player.group.add(sl);
+        headlights.push(sl);
+      }
+    }
+
+    // ----- Exhaust glow (point light + emissive plane) -----
+    const exhaustLight = new THREE.PointLight(0xff7a1a, 0, 6, 2);
+    exhaustLight.position.set(0, 0.45, -1.85);
+    player.group.add(exhaustLight);
+    const exhaustMat = new THREE.MeshBasicMaterial({
+      color: 0xff8a3d, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const exhaustMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), exhaustMat);
+    exhaustMesh.position.set(0, 0.42, -1.85);
+    player.group.add(exhaustMesh);
+
+    // ----- Rain particles -----
+    let rainPoints: THREE.Points | null = null;
+    let rainPositions: Float32Array | null = null;
+    const RAIN_COUNT = W.rain > 0 ? Math.floor(1500 * Math.min(W.rain, 1.5)) : 0;
+    if (RAIN_COUNT > 0) {
+      rainPositions = new Float32Array(RAIN_COUNT * 3);
+      for (let i = 0; i < RAIN_COUNT; i++) {
+        rainPositions[i * 3 + 0] = (Math.random() - 0.5) * 280;
+        rainPositions[i * 3 + 1] = Math.random() * 90;
+        rainPositions[i * 3 + 2] = (Math.random() - 0.5) * 280;
+      }
+      const rg = new THREE.BufferGeometry();
+      rg.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
+      const rm = new THREE.PointsMaterial({
+        color: 0xb8d8ff, size: 0.55, transparent: true,
+        opacity: 0.55, depthWrite: false,
+      });
+      rainPoints = new THREE.Points(rg, rm);
+      scene.add(rainPoints);
+    }
+
+    // ----- Tire smoke pool -----
+    const SMOKE_COUNT = 80;
+    const smokeMat = new THREE.MeshBasicMaterial({
+      color: 0xeeeeee, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.NormalBlending,
+    });
+    const smokeGeo = new THREE.PlaneGeometry(0.9, 0.9);
+    type Puff = { mesh: THREE.Mesh; life: number; maxLife: number };
+    const smokes: Puff[] = [];
+    for (let i = 0; i < SMOKE_COUNT; i++) {
+      const m = new THREE.Mesh(smokeGeo, smokeMat.clone());
+      m.rotation.x = -Math.PI / 2;
+      m.visible = false;
+      scene.add(m);
+      smokes.push({ mesh: m, life: 0, maxLife: 1 });
+    }
+    let smokeIdx = 0;
+    function spawnSmoke(x: number, z: number) {
+      const p = smokes[smokeIdx++ % SMOKE_COUNT];
+      p.mesh.position.set(x, 0.05, z);
+      p.mesh.scale.setScalar(0.6 + Math.random() * 0.4);
+      p.life = 0.8 + Math.random() * 0.4;
+      p.maxLife = p.life;
+      p.mesh.visible = true;
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75;
+    }
+
+    // Wet road darkening overlay (simple ambient tint via fog already; bump exposure dn if wet)
     // Grid placement helper — slot 0 is pole, behind start/finish, staggered L/R
     const totalCurveLen = curve.getLength();
     const GRID_LONG = 7.5;
@@ -1266,6 +1453,63 @@ export default function RacingGame() {
       camera.fov += (targetFov - camera.fov) * 0.08;
       camera.updateProjectionMatrix();
 
+      // ---------- Weather + visual FX ----------
+      // Rain — fall + follow camera
+      if (rainPoints && rainPositions) {
+        const cx = camera.position.x, cz = camera.position.z;
+        const fall = 110 * dt * (W.rain > 1 ? 1.4 : 1);
+        for (let i = 0; i < rainPositions.length; i += 3) {
+          rainPositions[i + 1] -= fall;
+          if (rainPositions[i + 1] < 0) {
+            rainPositions[i + 1] = 80 + Math.random() * 20;
+            rainPositions[i + 0] = cx + (Math.random() - 0.5) * 240;
+            rainPositions[i + 2] = cz + (Math.random() - 0.5) * 240;
+          }
+        }
+        (rainPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      }
+
+      // Lightning
+      if (W.lightning) {
+        lightningTimer -= dt;
+        if (lightningTimer <= 0) {
+          lightningFlash = 1;
+          lightningTimer = 3 + Math.random() * 6;
+        }
+        if (lightningFlash > 0) {
+          lightningFlash = Math.max(0, lightningFlash - dt * 5);
+          lightningLight.intensity = lightningFlash * 4;
+        }
+      }
+
+      // Exhaust glow scales with throttle + speed
+      const accelInput = (keys["w"] || keys["arrowup"] || touchRef.current.accel) ? 1 : 0;
+      const exhaustT = accelInput * Math.min(1, Math.abs(speed) / MAX_SPEED + 0.2);
+      exhaustLight.intensity += (exhaustT * 5 - exhaustLight.intensity) * Math.min(1, dt * 8);
+      exhaustMat.opacity += (exhaustT * 0.85 - exhaustMat.opacity) * Math.min(1, dt * 8);
+      exhaustMesh.scale.setScalar(0.7 + exhaustT * 0.6 + Math.random() * 0.05);
+
+      // Tire smoke when drifting / handbraking at speed
+      const drifting =
+        (Math.abs(lateralVel) > 5 || keys[" "] || touchRef.current.handbrake) &&
+        Math.abs(speed) > 12;
+      if (drifting) {
+        // spawn at rear wheels
+        const back = new THREE.Vector3(0, 0, -1.3).applyEuler(new THREE.Euler(0, heading, 0));
+        const sideR = new THREE.Vector3(0.8, 0, 0).applyEuler(new THREE.Euler(0, heading, 0));
+        spawnSmoke(carPos.x + back.x + sideR.x, carPos.z + back.z + sideR.z);
+        spawnSmoke(carPos.x + back.x - sideR.x, carPos.z + back.z - sideR.z);
+      }
+      for (const p of smokes) {
+        if (!p.mesh.visible) continue;
+        p.life -= dt;
+        if (p.life <= 0) { p.mesh.visible = false; continue; }
+        const k = p.life / p.maxLife;
+        (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75 * k;
+        p.mesh.scale.x += dt * 1.2;
+        p.mesh.scale.y += dt * 1.2;
+      }
+
       // HUD
       hudTick++;
       if (hudTick % 5 === 0) {
@@ -1398,6 +1642,8 @@ export default function RacingGame() {
       )}
 
       {screen === "track" && (
+        <>
+        <WeatherSelect weatherId={weatherId} onPick={setWeatherId} />
         <TrackSelect
           trackId={trackId}
           career={career}
@@ -1420,6 +1666,7 @@ export default function RacingGame() {
             else { setResult(null); setScreen("racing"); }
           }}
         />
+        </>
       )}
 
       {screen === "editor" && (
@@ -2174,6 +2421,35 @@ function Speedometer({ speed, gear }: { speed: number; gear: number }) {
           }}
         />
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#fff]" />
+      </div>
+    </div>
+  );
+}
+
+function WeatherSelect({ weatherId, onPick }: { weatherId: WeatherId; onPick: (id: WeatherId) => void }) {
+  return (
+    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+      <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2 shadow-neon">
+        <span className="text-[10px] font-display tracking-widest uppercase text-white/60 px-2">Weather</span>
+        <div className="flex gap-1.5 overflow-x-auto max-w-[80vw]">
+          {WEATHERS.map((w) => {
+            const active = w.id === weatherId;
+            return (
+              <button
+                key={w.id}
+                onClick={() => onPick(w.id)}
+                className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-display tracking-wider uppercase transition-all border ${
+                  active
+                    ? "bg-gradient-to-br from-fuchsia-500/30 to-cyan-400/30 border-cyan-300/70 text-white shadow-[0_0_18px_rgba(34,211,238,0.5)]"
+                    : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white"
+                }`}
+                title={w.blurb}
+              >
+                <span className="mr-1">{w.icon}</span>{w.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
