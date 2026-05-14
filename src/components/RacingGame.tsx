@@ -1193,6 +1193,10 @@ export default function RacingGame() {
     let lastCountdownShown = 99;
     setCountdown(3);
 
+    // Session stats for daily challenges
+    let sessTopSpeedKmh = 0;
+    let sessDriftDist = 0;
+
     const animate = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
