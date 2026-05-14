@@ -504,25 +504,23 @@ export default function RacingGame() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    const W = WEATHERS.find((w) => w.id === weatherId) ?? WEATHERS[0];
+    renderer.toneMappingExposure = W.exposure;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    // Cyberpunk sunset → deep night gradient sky
+    // Weather-driven sky gradient
     const skyCanvas = document.createElement("canvas");
     skyCanvas.width = 8; skyCanvas.height = 512;
     const sctx0 = skyCanvas.getContext("2d")!;
     const grd = sctx0.createLinearGradient(0, 0, 0, 512);
-    grd.addColorStop(0.00, "#05030f");
-    grd.addColorStop(0.35, "#1a0a3a");
-    grd.addColorStop(0.62, "#5b1a6a");
-    grd.addColorStop(0.78, "#d63b6a");
-    grd.addColorStop(0.90, "#ff8a3d");
-    grd.addColorStop(1.00, "#ffd089");
+    const stops = W.sky;
+    stops.forEach((c, i) => grd.addColorStop(i / (stops.length - 1), c));
     sctx0.fillStyle = grd;
     sctx0.fillRect(0, 0, 8, 512);
-    // Stars
-    for (let i = 0; i < 90; i++) {
+    // Stars (weather-scaled)
+    const starCount = Math.floor(110 * W.starDensity);
+    for (let i = 0; i < starCount; i++) {
       const y = Math.random() * 200;
       sctx0.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.7})`;
       sctx0.fillRect(Math.random() * 8, y, 1, 1);
@@ -534,14 +532,14 @@ export default function RacingGame() {
       new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false }),
     );
     scene.add(skyDome);
-    scene.fog = new THREE.FogExp2(0x1a0a2e, 0.0018);
+    scene.fog = new THREE.FogExp2(W.fog.color, W.fog.density);
 
     const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 3000);
 
-    const hemi = new THREE.HemisphereLight(0xff6ad5, 0x1a0a3a, 0.55);
+    const hemi = new THREE.HemisphereLight(W.hemi.sky, W.hemi.ground, W.hemi.intensity);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffb070, 1.2);
-    sun.position.set(280, 180, -240);
+    const sun = new THREE.DirectionalLight(W.sun.color, W.sun.intensity);
+    sun.position.set(W.sun.pos[0], W.sun.pos[1], W.sun.pos[2]);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left = -300;
@@ -550,10 +548,17 @@ export default function RacingGame() {
     sun.shadow.camera.bottom = -300;
     sun.shadow.camera.far = 800;
     scene.add(sun);
-    // Cool rim light for cyberpunk vibe
-    const rim = new THREE.DirectionalLight(0x22d3ee, 0.5);
+    // Cool rim light
+    const rim = new THREE.DirectionalLight(W.rim.color, W.rim.intensity);
     rim.position.set(-200, 120, 200);
     scene.add(rim);
+
+    // Lightning flashes (thunderstorm)
+    const lightningLight = new THREE.DirectionalLight(0xeaf6ff, 0);
+    lightningLight.position.set(0, 400, 0);
+    scene.add(lightningLight);
+    let lightningTimer = 2 + Math.random() * 4;
+    let lightningFlash = 0;
 
     // ---------- Futuristic environment (updaters tick each frame) ----------
     const envUpdaters: ((t: number) => void)[] = [];
