@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import DailyHub from "./DailyHub";
 import { recordRace } from "@/lib/dailyRewards";
+import Leaderboard from "./Leaderboard";
+import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
+import { submitLeaderboard } from "@/lib/leaderboard";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -348,6 +351,10 @@ export default function RacingGame() {
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
   const [showDaily, setShowDaily] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [replayData, setReplayData] = useState<ReplayData | null>(null);
+  const [showReplay, setShowReplay] = useState(false);
+  const lastReplayFramesRef = useRef<ReplayFrame[]>([]);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
   // -------- Multiplayer state --------
@@ -1197,6 +1204,10 @@ export default function RacingGame() {
     let sessTopSpeedKmh = 0;
     let sessDriftDist = 0;
 
+    // Replay capture: sample at ~10 Hz
+    const replayFrames: ReplayFrame[] = [];
+    let lastReplaySample = 0;
+
     const animate = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -1536,20 +1547,42 @@ export default function RacingGame() {
         });
       }
 
+      // Replay sampling (~10 Hz, capped)
+      if (now - lastReplaySample > 100 && replayFrames.length < 4000) {
+        lastReplaySample = now;
+        replayFrames.push({ t: now, x: carPos.x, z: carPos.z, h: heading, speed });
+      }
+
       renderer.render(scene, camera);
 
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         const points = POINTS[position - 1] ?? 0;
         // Record daily-challenge progress for this race
+        const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000);
         try {
           recordRace({
             won: position === 1,
             topSpeedKmh: sessTopSpeedKmh,
-            raceTimeSec: Math.max(0, (now - raceStartAt) / 1000),
+            raceTimeSec: finalRaceTime,
             driftDistanceM: sessDriftDist,
           });
         } catch {}
+        // Save replay
+        lastReplayFramesRef.current = replayFrames.slice();
+        // Submit to global leaderboard (best lap > 0 means at least one lap completed)
+        if (bestLap > 0) {
+          submitLeaderboard({
+            player_name: playerName,
+            driver_id: driver.id,
+            track_id: track.id,
+            weather_id: weatherId,
+            best_lap: Number(bestLap.toFixed(3)),
+            race_time_sec: Number(finalRaceTime.toFixed(2)),
+            position,
+            won: position === 1,
+          }).catch(() => {});
+        }
         // Compute final order of every car on the grid
         const standingsList: { id: string; prog: number }[] = [
           { id: driver.id, prog: raceProgress + 0.0001 },
@@ -1617,11 +1650,14 @@ export default function RacingGame() {
           onCareer={() => { setMode("career"); setScreen("driver"); }}
           onMulti={() => { setMode("multi"); setScreen("multi"); }}
           onDaily={() => setShowDaily(true)}
+          onLeaderboard={() => setShowLeaderboard(true)}
           onReset={() => { try { localStorage.removeItem(SAVE_KEY); } catch {}; setCareer(null); }}
         />
       )}
 
       {showDaily && <DailyHub onClose={() => setShowDaily(false)} />}
+      {showLeaderboard && <Leaderboard onClose={() => setShowLeaderboard(false)} tracks={allTracks.map((t) => ({ id: t.id, name: t.name }))} />}
+      {showReplay && replayData && <ReplayViewer data={replayData} onClose={() => setShowReplay(false)} />}
 
       {screen === "multi" && (
         <MultiplayerEntry
@@ -1782,6 +1818,17 @@ export default function RacingGame() {
           career={career}
           onMenu={() => setScreen("menu")}
           onAgain={() => { setResult(null); setScreen("racing"); }}
+          canReplay={lastReplayFramesRef.current.length > 1}
+          onReplay={() => {
+            setReplayData({
+              trackName: track.name,
+              driverName: driver.name,
+              driverColor: driver.primary,
+              waypoints: track.waypoints,
+              frames: lastReplayFramesRef.current,
+            });
+            setShowReplay(true);
+          }}
         />
       )}
     </div>
@@ -1795,12 +1842,13 @@ function curveLength(curve: THREE.CatmullRomCurve3) {
 }
 
 // ---------------- UI Subcomponents ----------------
-function MainMenu({ career, onQuick, onCareer, onMulti, onDaily, onReset }: {
+function MainMenu({ career, onQuick, onCareer, onMulti, onDaily, onLeaderboard, onReset }: {
   career: CareerSave | null;
   onQuick: () => void;
   onCareer: () => void;
   onMulti: () => void;
   onDaily: () => void;
+  onLeaderboard: () => void;
   onReset: () => void;
 }) {
   return (
@@ -1824,6 +1872,9 @@ function MainMenu({ career, onQuick, onCareer, onMulti, onDaily, onReset }: {
         </button>
         <button onClick={onDaily} className="px-6 py-4 bg-yellow-500/90 hover:bg-yellow-400 text-black font-black tracking-widest uppercase shadow-[0_0_40px_rgba(250,200,0,0.4)]">
           Daily Hub 🎁
+        </button>
+        <button onClick={onLeaderboard} className="px-6 py-4 bg-gradient-to-r from-fuchsia-600 to-purple-700 hover:from-fuchsia-500 hover:to-purple-600 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(180,60,220,0.45)]">
+          Leaderboard 🏆
         </button>
         {career && (
           <div className="mt-4 p-3 border border-white/10 bg-black/30 text-xs">
@@ -2285,7 +2336,7 @@ function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTrack
   );
 }
 
-function ResultScreen({ result, driver, track, mode, career, onMenu, onAgain }: {
+function ResultScreen({ result, driver, track, mode, career, onMenu, onAgain, onReplay, canReplay }: {
   result: { position: number; bestLap: number; points: number };
   driver: Driver;
   track: TrackDef;
@@ -2293,6 +2344,8 @@ function ResultScreen({ result, driver, track, mode, career, onMenu, onAgain }: 
   career: CareerSave | null;
   onMenu: () => void;
   onAgain: () => void;
+  onReplay: () => void;
+  canReplay: boolean;
 }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/85 to-black/95 text-white z-30 px-6">
@@ -2311,6 +2364,11 @@ function ResultScreen({ result, driver, track, mode, career, onMenu, onAgain }: 
         <button onClick={onAgain} className="px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold tracking-widest uppercase">
           Race Again
         </button>
+        {canReplay && (
+          <button onClick={onReplay} className="px-6 py-3 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold tracking-widest uppercase">
+            Replay ▶
+          </button>
+        )}
         <button onClick={onMenu} className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold tracking-widest uppercase">
           Menu
         </button>
