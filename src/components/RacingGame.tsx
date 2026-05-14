@@ -1616,9 +1616,12 @@ export default function RacingGame() {
           onQuick={() => { setMode("quick"); setScreen("driver"); }}
           onCareer={() => { setMode("career"); setScreen("driver"); }}
           onMulti={() => { setMode("multi"); setScreen("multi"); }}
+          onDaily={() => setShowDaily(true)}
           onReset={() => { try { localStorage.removeItem(SAVE_KEY); } catch {}; setCareer(null); }}
         />
       )}
+
+      {showDaily && <DailyHub onClose={() => setShowDaily(false)} />}
 
       {screen === "multi" && (
         <MultiplayerEntry
@@ -1792,11 +1795,12 @@ function curveLength(curve: THREE.CatmullRomCurve3) {
 }
 
 // ---------------- UI Subcomponents ----------------
-function MainMenu({ career, onQuick, onCareer, onMulti, onReset }: {
+function MainMenu({ career, onQuick, onCareer, onMulti, onDaily, onReset }: {
   career: CareerSave | null;
   onQuick: () => void;
   onCareer: () => void;
   onMulti: () => void;
+  onDaily: () => void;
   onReset: () => void;
 }) {
   return (
@@ -1817,6 +1821,9 @@ function MainMenu({ career, onQuick, onCareer, onMulti, onReset }: {
         </button>
         <button onClick={onMulti} className="px-6 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(0,80,220,0.45)]">
           Multiplayer
+        </button>
+        <button onClick={onDaily} className="px-6 py-4 bg-yellow-500/90 hover:bg-yellow-400 text-black font-black tracking-widest uppercase shadow-[0_0_40px_rgba(250,200,0,0.4)]">
+          Daily Hub 🎁
         </button>
         {career && (
           <div className="mt-4 p-3 border border-white/10 bg-black/30 text-xs">
