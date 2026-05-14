@@ -1559,14 +1559,30 @@ export default function RacingGame() {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         const points = POINTS[position - 1] ?? 0;
         // Record daily-challenge progress for this race
+        const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000);
         try {
           recordRace({
             won: position === 1,
             topSpeedKmh: sessTopSpeedKmh,
-            raceTimeSec: Math.max(0, (now - raceStartAt) / 1000),
+            raceTimeSec: finalRaceTime,
             driftDistanceM: sessDriftDist,
           });
         } catch {}
+        // Save replay
+        lastReplayFramesRef.current = replayFrames.slice();
+        // Submit to global leaderboard (best lap > 0 means at least one lap completed)
+        if (bestLap > 0) {
+          submitLeaderboard({
+            player_name: playerName,
+            driver_id: driver.id,
+            track_id: track.id,
+            weather_id: weatherId,
+            best_lap: Number(bestLap.toFixed(3)),
+            race_time_sec: Number(finalRaceTime.toFixed(2)),
+            position,
+            won: position === 1,
+          }).catch(() => {});
+        }
         // Compute final order of every car on the grid
         const standingsList: { id: string; prog: number }[] = [
           { id: driver.id, prog: raceProgress + 0.0001 },
