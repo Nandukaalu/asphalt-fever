@@ -64,6 +64,109 @@ const DRIVERS: Driver[] = [
   { id: "onyx", name: "Sam Carter", team: "Onyx Racing", primary: 0x0f172a, secondary: 0xfbbf24, number: 55 },
 ];
 
+// ---------------- Weather ----------------
+export type WeatherId =
+  | "clear-night"
+  | "rainy-night"
+  | "foggy-night"
+  | "sunset"
+  | "thunderstorm"
+  | "cloudy";
+
+type WeatherDef = {
+  id: WeatherId;
+  label: string;
+  blurb: string;
+  icon: string;
+  // sky gradient stops (top -> bottom)
+  sky: string[];
+  starDensity: number; // 0..1
+  fog: { color: number; density: number };
+  hemi: { sky: number; ground: number; intensity: number };
+  sun: { color: number; intensity: number; pos: [number, number, number] };
+  rim: { color: number; intensity: number };
+  exposure: number;
+  rain: number; // 0..1 droplet density
+  lightning: boolean;
+  wet: boolean;
+  night: boolean; // headlights on
+};
+
+export const WEATHERS: WeatherDef[] = [
+  {
+    id: "clear-night", label: "Clear Night", blurb: "Crisp stars, neon city",
+    icon: "✦",
+    sky: ["#02030a", "#0a0a26", "#1a1452", "#2d1a6e", "#48227a", "#6a2da3"],
+    starDensity: 1,
+    fog: { color: 0x0a0820, density: 0.0012 },
+    hemi: { sky: 0x6a4adf, ground: 0x0a0820, intensity: 0.45 },
+    sun: { color: 0x9b6dff, intensity: 0.55, pos: [200, 220, -180] },
+    rim: { color: 0x22d3ee, intensity: 0.7 },
+    exposure: 1.0, rain: 0, lightning: false, wet: false, night: true,
+  },
+  {
+    id: "rainy-night", label: "Rainy Night", blurb: "Wet asphalt, falling rain",
+    icon: "🌧",
+    sky: ["#020308", "#06081a", "#0d1430", "#1a2147", "#28305c", "#3a4470"],
+    starDensity: 0.1,
+    fog: { color: 0x0a1020, density: 0.006 },
+    hemi: { sky: 0x4a6aa0, ground: 0x05080f, intensity: 0.35 },
+    sun: { color: 0x6080b0, intensity: 0.3, pos: [-150, 250, -200] },
+    rim: { color: 0x40b8ff, intensity: 0.55 },
+    exposure: 0.85, rain: 1, lightning: false, wet: true, night: true,
+  },
+  {
+    id: "foggy-night", label: "Foggy Night", blurb: "Low visibility haze",
+    icon: "🌫",
+    sky: ["#0a0a14", "#15151f", "#22222e", "#2e2e3c", "#3a3a4a", "#444454"],
+    starDensity: 0.15,
+    fog: { color: 0x2a2a38, density: 0.013 },
+    hemi: { sky: 0x6f7a92, ground: 0x1a1a24, intensity: 0.55 },
+    sun: { color: 0x8090a8, intensity: 0.4, pos: [100, 200, 150] },
+    rim: { color: 0x90c0ff, intensity: 0.4 },
+    exposure: 0.95, rain: 0, lightning: false, wet: false, night: true,
+  },
+  {
+    id: "sunset", label: "Sunset", blurb: "Golden hour at the strip",
+    icon: "☀",
+    sky: ["#0d0820", "#33124a", "#7a1f5c", "#d63b6a", "#ff8a3d", "#ffd089"],
+    starDensity: 0.2,
+    fog: { color: 0xff8a4a, density: 0.0014 },
+    hemi: { sky: 0xff8a5a, ground: 0x4a1a3a, intensity: 0.7 },
+    sun: { color: 0xffb070, intensity: 1.4, pos: [280, 180, -240] },
+    rim: { color: 0xff66cc, intensity: 0.55 },
+    exposure: 1.15, rain: 0, lightning: false, wet: false, night: false,
+  },
+  {
+    id: "thunderstorm", label: "Thunderstorm", blurb: "Heavy rain & lightning",
+    icon: "⚡",
+    sky: ["#01020a", "#040820", "#091230", "#101a40", "#162250", "#1f2c60"],
+    starDensity: 0,
+    fog: { color: 0x070b1c, density: 0.009 },
+    hemi: { sky: 0x3a4870, ground: 0x040614, intensity: 0.3 },
+    sun: { color: 0x4060a0, intensity: 0.25, pos: [-200, 300, -100] },
+    rim: { color: 0x60a0ff, intensity: 0.4 },
+    exposure: 0.8, rain: 1.4, lightning: true, wet: true, night: true,
+  },
+  {
+    id: "cloudy", label: "Cloudy", blurb: "Overcast atmosphere",
+    icon: "☁",
+    sky: ["#1a1f2e", "#2a3142", "#3a4256", "#4a5268", "#5a637a", "#6c768e"],
+    starDensity: 0,
+    fog: { color: 0x4a5268, density: 0.0035 },
+    hemi: { sky: 0x9aa8c0, ground: 0x2a3040, intensity: 0.85 },
+    sun: { color: 0xc0c8d8, intensity: 0.7, pos: [180, 260, 120] },
+    rim: { color: 0xa0b4d0, intensity: 0.35 },
+    exposure: 1.0, rain: 0, lightning: false, wet: false, night: false,
+  },
+];
+const WEATHER_KEY = "af-weather-v1";
+function loadWeather(): WeatherId {
+  if (typeof window === "undefined") return "clear-night";
+  const v = localStorage.getItem(WEATHER_KEY) as WeatherId | null;
+  return WEATHERS.find((w) => w.id === v)?.id ?? "clear-night";
+}
+
 // ---- Custom garage drivers (from /customize page) ----
 function hexToInt(hex: string, fallback: number): number {
   if (!hex || typeof hex !== "string") return fallback;
