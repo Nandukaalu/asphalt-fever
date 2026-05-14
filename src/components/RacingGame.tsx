@@ -1506,6 +1506,8 @@ export default function RacingGame() {
         const sideR = new THREE.Vector3(0.8, 0, 0).applyEuler(new THREE.Euler(0, heading, 0));
         spawnSmoke(carPos.x + back.x + sideR.x, carPos.z + back.z + sideR.z);
         spawnSmoke(carPos.x + back.x - sideR.x, carPos.z + back.z - sideR.z);
+        // Track drift distance in meters (m/s * dt) — physics speed is roughly m/s scale
+        sessDriftDist += Math.abs(speed) * dt;
       }
       for (const p of smokes) {
         if (!p.mesh.visible) continue;
