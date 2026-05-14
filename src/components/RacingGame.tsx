@@ -1098,7 +1098,16 @@ export default function RacingGame() {
     player.group.rotation.y = startHeading;
 
     // AI cars (other drivers)
-    type AI = { car: ReturnType<typeof buildCar>; t: number; speed: number };
+    type AI = {
+      car: ReturnType<typeof buildCar>;
+      t: number;
+      speed: number;
+      lap: number;
+      lapStart: number;
+      lastLap: number;
+      bestLap: number;
+      prevT: number;
+    };
     const MAX_SPEED_PREVIEW = 78;
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
     const ais: (AI & { driver: Driver; offset: number })[] = [];
@@ -1114,7 +1123,10 @@ export default function RacingGame() {
         c.group.position.set(g.x, 0, g.z);
         c.group.rotation.y = g.heading;
         const lateral = (slot % 2 === 0 ? 1 : -1) * GRID_LAT;
-        ais.push({ car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral });
+        ais.push({
+          car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral,
+          lap: 1, lapStart: 0, lastLap: 0, bestLap: 0, prevT: g.t,
+        });
       });
     }
 
