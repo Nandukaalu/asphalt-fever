@@ -27,8 +27,8 @@ export default function LiveTiming({ entries, totalLaps, fastestLap }: Props) {
   return (
     <div
       className="absolute z-10 select-none pointer-events-none font-mono text-white
-                 right-2 top-20 sm:right-3 sm:top-24
-                 w-[212px] sm:w-[260px]
+                 left-2 sm:left-3 bottom-36 sm:bottom-40
+                 w-[200px] sm:w-[240px]
                  bg-black/55 backdrop-blur-md border border-white/10
                  shadow-[0_0_30px_rgba(220,0,0,0.18)]"
     >
