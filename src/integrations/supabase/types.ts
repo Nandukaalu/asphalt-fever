@@ -14,7 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      leaderboard_entries: {
+        Row: {
+          best_lap: number
+          created_at: string
+          driver_id: string
+          id: string
+          player_name: string
+          position: number
+          race_time_sec: number
+          track_id: string
+          weather_id: string
+          won: boolean
+        }
+        Insert: {
+          best_lap: number
+          created_at?: string
+          driver_id: string
+          id?: string
+          player_name: string
+          position: number
+          race_time_sec: number
+          track_id: string
+          weather_id: string
+          won?: boolean
+        }
+        Update: {
+          best_lap?: number
+          created_at?: string
+          driver_id?: string
+          id?: string
+          player_name?: string
+          position?: number
+          race_time_sec?: number
+          track_id?: string
+          weather_id?: string
+          won?: boolean
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
