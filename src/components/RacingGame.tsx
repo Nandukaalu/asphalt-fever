@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import DailyHub from "./DailyHub";
+import { recordRace } from "@/lib/dailyRewards";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -345,6 +347,7 @@ export default function RacingGame() {
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
   const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
+  const [showDaily, setShowDaily] = useState(false);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
   // -------- Multiplayer state --------
