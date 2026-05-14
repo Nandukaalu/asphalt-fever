@@ -1541,6 +1541,15 @@ export default function RacingGame() {
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         const points = POINTS[position - 1] ?? 0;
+        // Record daily-challenge progress for this race
+        try {
+          recordRace({
+            won: position === 1,
+            topSpeedKmh: sessTopSpeedKmh,
+            raceTimeSec: Math.max(0, (now - raceStartAt) / 1000),
+            driftDistanceM: sessDriftDist,
+          });
+        } catch {}
         // Compute final order of every car on the grid
         const standingsList: { id: string; prog: number }[] = [
           { id: driver.id, prog: raceProgress + 0.0001 },
