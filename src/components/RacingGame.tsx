@@ -2425,3 +2425,32 @@ function Speedometer({ speed, gear }: { speed: number; gear: number }) {
     </div>
   );
 }
+
+function WeatherSelect({ weatherId, onPick }: { weatherId: WeatherId; onPick: (id: WeatherId) => void }) {
+  return (
+    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
+      <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2 shadow-neon">
+        <span className="text-[10px] font-display tracking-widest uppercase text-white/60 px-2">Weather</span>
+        <div className="flex gap-1.5 overflow-x-auto max-w-[80vw]">
+          {WEATHERS.map((w) => {
+            const active = w.id === weatherId;
+            return (
+              <button
+                key={w.id}
+                onClick={() => onPick(w.id)}
+                className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-display tracking-wider uppercase transition-all border ${
+                  active
+                    ? "bg-gradient-to-br from-fuchsia-500/30 to-cyan-400/30 border-cyan-300/70 text-white shadow-[0_0_18px_rgba(34,211,238,0.5)]"
+                    : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10 hover:text-white"
+                }`}
+                title={w.blurb}
+              >
+                <span className="mr-1">{w.icon}</span>{w.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
