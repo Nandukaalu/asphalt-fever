@@ -1784,7 +1784,7 @@ export default function RacingGame() {
         const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000) + penaltyS;
         try {
           recordRace({
-            won: position === 1,
+            won: adjustedPosition === 1,
             topSpeedKmh: sessTopSpeedKmh,
             raceTimeSec: finalRaceTime,
             driftDistanceM: sessDriftDist,
