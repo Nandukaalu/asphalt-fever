@@ -1801,8 +1801,8 @@ export default function RacingGame() {
             weather_id: weatherId,
             best_lap: Number(bestLap.toFixed(3)),
             race_time_sec: Number(finalRaceTime.toFixed(2)),
-            position,
-            won: position === 1,
+            position: adjustedPosition,
+            won: adjustedPosition === 1,
           }).catch(() => {});
         }
         // Compute final order of every car on the grid
@@ -1821,7 +1821,7 @@ export default function RacingGame() {
         }
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
-        setResult({ position, bestLap, points });
+        setResult({ position: adjustedPosition, bestLap, points });
         if (mode === "career") {
           const cur: CareerSave = loadSave() ?? {
             driverId: driver.id, points: 0, completed: {}, standings: {}, rounds: [],
@@ -1831,7 +1831,7 @@ export default function RacingGame() {
           if (!cur.rounds) cur.rounds = [];
           const prev = cur.completed[track.id];
           const newBest = prev && prev.bestLap > 0 && prev.bestLap < bestLap ? prev.bestLap : bestLap;
-          cur.completed[track.id] = { bestLap: newBest, position, points };
+          cur.completed[track.id] = { bestLap: newBest, position: adjustedPosition, points };
           order.forEach((id, i) => {
             const pts = POINTS[i] ?? 0;
             cur.standings[id] = (cur.standings[id] ?? 0) + pts;
