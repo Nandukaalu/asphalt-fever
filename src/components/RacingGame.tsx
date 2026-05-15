@@ -2433,9 +2433,6 @@ function MainMenu({ career, onQuick, onCareer, onMulti, onDaily, onLeaderboard, 
         <button onClick={onDaily} className="px-6 py-4 bg-yellow-500/90 hover:bg-yellow-400 text-black font-black tracking-widest uppercase shadow-[0_0_40px_rgba(250,200,0,0.4)]">
           Daily Hub 🎁
         </button>
-        <button onClick={onLeaderboard} className="px-6 py-4 bg-gradient-to-r from-fuchsia-600 to-purple-700 hover:from-fuchsia-500 hover:to-purple-600 text-white font-black tracking-widest uppercase shadow-[0_0_40px_rgba(180,60,220,0.45)]">
-          Leaderboard 🏆
-        </button>
         {career && (
           <div className="mt-4 p-3 border border-white/10 bg-black/30 text-xs">
             <div className="text-white/50 uppercase tracking-widest mb-1">Career</div>
