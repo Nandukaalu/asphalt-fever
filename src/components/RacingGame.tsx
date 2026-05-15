@@ -8,6 +8,11 @@ import Leaderboard from "./Leaderboard";
 import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
 import { submitLeaderboard } from "@/lib/leaderboard";
 import LiveTiming, { type LiveEntry } from "./LiveTiming";
+import { CinematicIntro, type GridDriver } from "./CinematicIntro";
+import { FriendsPanel } from "./Friends";
+import { useAuth } from "@/hooks/useAuth";
+import { Link } from "@tanstack/react-router";
+import { Users } from "lucide-react";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -337,6 +342,7 @@ function writeSave(s: CareerSave) {
 
 // ---------------- Component ----------------
 export default function RacingGame() {
+  const { user, profile, signOut } = useAuth();
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, totalLaps: 3, lapTime: 0, bestLap: 0, position: 1 });
   const [liveBoard, setLiveBoard] = useState<LiveEntry[]>([]);
@@ -360,6 +366,9 @@ export default function RacingGame() {
   const [sessionMode, setSessionMode] = useState<"qualifying" | "race">("race");
   const sessionModeRef = useRef<"qualifying" | "race">("race");
   useEffect(() => { sessionModeRef.current = sessionMode; }, [sessionMode]);
+  // Cinematic race intro
+  const [introOpen, setIntroOpen] = useState(false);
+  const introMsRef = useRef<number>(0);
   const [mode, setMode] = useState<Mode>("quick");
   const [customDrivers, setCustomDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
@@ -374,6 +383,7 @@ export default function RacingGame() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [replayData, setReplayData] = useState<ReplayData | null>(null);
   const [showReplay, setShowReplay] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
   const lastReplayFramesRef = useRef<ReplayFrame[]>([]);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
@@ -397,7 +407,23 @@ export default function RacingGame() {
     try { localStorage.setItem("apex-name", playerName); } catch {}
   }, [playerName]);
 
+  // Sync username from authenticated profile
+  useEffect(() => {
+    if (profile?.username) setPlayerName(profile.display_name || profile.username);
+  }, [profile?.username, profile?.display_name]);
+
   useEffect(() => { setCareer(loadSave()); }, []);
+
+  // Trigger cinematic intro when entering single-player race (not qualifying, not multi)
+  useEffect(() => {
+    if (screen !== "racing") return;
+    if (sessionMode !== "race") return;
+    if (mode === "multi") return;
+    introMsRef.current = 5500;
+    setIntroOpen(true);
+    const t = setTimeout(() => setIntroOpen(false), 5400);
+    return () => clearTimeout(t);
+  }, [screen, sessionMode, mode]);
   useEffect(() => { setCustomTracks(loadCustomTracks()); }, []);
   useEffect(() => {
     const apply = () => {
@@ -1244,9 +1270,11 @@ export default function RacingGame() {
     let last = performance.now();
     let raf = 0;
     let hudTick = 0;
-    const raceStartAt = last + 3800;
+    const introMs = introMsRef.current;
+    introMsRef.current = 0;
+    const raceStartAt = last + 3800 + introMs;
     let lastCountdownShown = 99;
-    setCountdown(3);
+    setCountdown(introMs > 0 ? null : 3);
 
     // Session stats for daily challenges
     let sessTopSpeedKmh = 0;
@@ -1276,7 +1304,7 @@ export default function RacingGame() {
       if (preRace) {
         const remaining = Math.ceil((raceStartAt - now) / 1000);
         const shown = remaining > 0 ? remaining : 0; // 0 == GO
-        if (shown !== lastCountdownShown) {
+        if (shown !== lastCountdownShown && shown <= 3) {
           lastCountdownShown = shown;
           setCountdown(shown);
         }
@@ -1880,6 +1908,39 @@ export default function RacingGame() {
       {showDaily && <DailyHub onClose={() => setShowDaily(false)} />}
       {showLeaderboard && <Leaderboard onClose={() => setShowLeaderboard(false)} tracks={allTracks.map((t) => ({ id: t.id, name: t.name }))} />}
       {showReplay && replayData && <ReplayViewer data={replayData} onClose={() => setShowReplay(false)} />}
+      {showFriends && <FriendsPanel onClose={() => setShowFriends(false)} />}
+
+      {/* Top-right account/friends bar (visible on menu) */}
+      {screen === "menu" && (
+        <div className="absolute top-3 right-3 z-40 flex items-center gap-2">
+          {user ? (
+            <>
+              <button
+                onClick={() => setShowFriends(true)}
+                className="flex items-center gap-1.5 bg-black/60 backdrop-blur border border-white/15 px-3 py-1.5 text-xs uppercase tracking-widest text-white hover:border-red-500"
+              >
+                <Users size={14}/> Friends
+              </button>
+              <div className="bg-black/60 backdrop-blur border border-white/15 px-3 py-1.5 text-xs text-white/80">
+                @{profile?.username ?? "racer"}
+              </div>
+              <button
+                onClick={() => signOut()}
+                className="bg-black/60 backdrop-blur border border-white/15 px-3 py-1.5 text-xs uppercase tracking-widest text-white/70 hover:text-white"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/auth"
+              className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 text-xs uppercase tracking-widest font-bold"
+            >
+              Sign in
+            </Link>
+          )}
+        </div>
+      )}
 
       {screen === "multi" && (
         <MultiplayerEntry
@@ -2102,6 +2163,33 @@ export default function RacingGame() {
           )}
 
           <TouchControls touchRef={touchRef} />
+
+          {introOpen && (() => {
+            const grid: GridDriver[] = (() => {
+              const order = qualifyingGrid && qualifyingGrid.length
+                ? qualifyingGrid
+                : [driver.id, ...DRIVERS.filter(d => d.id !== driver.id).slice(0, 9).map(d => d.id)];
+              return order.map((id) => {
+                const d = allDrivers.find(x => x.id === id) ?? DRIVERS[0];
+                const isPlayer = id === driver.id;
+                return {
+                  id,
+                  name: isPlayer ? (playerName || d.name) : d.name,
+                  team: d.team,
+                  color: `#${d.primary.toString(16).padStart(6, "0")}`,
+                };
+              });
+            })();
+            return (
+              <CinematicIntro
+                trackName={track.name}
+                country={track.country}
+                drivers={grid}
+                playerId={driver.id}
+                onDone={() => setIntroOpen(false)}
+              />
+            );
+          })()}
         </>
       )}
 
