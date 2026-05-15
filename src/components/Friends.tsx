@@ -94,7 +94,7 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
       const username = profMap.get(uid) ?? "—";
       const a = agg.get(username) || { best: Infinity, wins: 0 };
       return { user_id: uid, username, best_lap: a.best, wins: a.wins };
-    }).sort((a, b) => a.best - b.best);
+    }).sort((a, b) => a.best_lap - b.best_lap);
     setRanks(list);
   }, [user, accepted]);
 
