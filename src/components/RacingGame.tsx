@@ -342,6 +342,17 @@ export default function RacingGame() {
   const [liveBoard, setLiveBoard] = useState<LiveEntry[]>([]);
   const [fastestLapTime, setFastestLapTime] = useState<number>(0);
   const [countdown, setCountdown] = useState<number | null>(null);
+  // Pit stops
+  const [pitStops, setPitStops] = useState(0);
+  const [pitRequested, setPitRequested] = useState(false);
+  const [pitActive, setPitActive] = useState(false); // currently in pit box
+  const [pitProgress, setPitProgress] = useState(0); // 0..1
+  const pitRequestedRef = useRef(false);
+  const pitActiveRef = useRef(false);
+  const pitStopsRef = useRef(0);
+  useEffect(() => { pitRequestedRef.current = pitRequested; }, [pitRequested]);
+  useEffect(() => { pitActiveRef.current = pitActive; }, [pitActive]);
+  useEffect(() => { pitStopsRef.current = pitStops; }, [pitStops]);
   const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [qualifyingGrid, setQualifyingGrid] = useState<string[] | null>(null);
   const qualifyingGridRef = useRef<string[] | null>(null);
@@ -1195,6 +1206,13 @@ export default function RacingGame() {
     let raceFinished = false;
     let raceProgress = 0; // total fraction
 
+    // ---------- Pit-stop session state ----------
+    const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
+    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0);
+    pitStopsRef.current = 0; pitRequestedRef.current = false; pitActiveRef.current = false;
+    let pitBoxStart = 0; // ms when current pit stop began
+    const PIT_DURATION_MS = 5000;
+
     function closestT(pos: THREE.Vector3) {
       let best = 0, bestD = Infinity;
       for (let i = 0; i < centerline.length; i++) {
@@ -1290,11 +1308,31 @@ export default function RacingGame() {
       }
 
       const t = touchRef.current;
-      const accel = !raceFinished && (keys["w"] || keys["arrowup"] || t.accel);
-      const brake = !raceFinished && (keys["s"] || keys["arrowdown"] || t.brake);
+      const inPit = pitActiveRef.current;
+      const accel = !raceFinished && !inPit && (keys["w"] || keys["arrowup"] || t.accel);
+      const brake = !raceFinished && !inPit && (keys["s"] || keys["arrowdown"] || t.brake);
       const leftKey = keys["a"] || keys["arrowleft"];
       const rightKey = keys["d"] || keys["arrowright"];
-      const handbrake = keys[" "] || t.handbrake;
+      const handbrake = !inPit && (keys[" "] || t.handbrake);
+
+      // ---------- Pit stop in progress: hold car in box, run timer ----------
+      if (inPit) {
+        speed *= Math.pow(0.001, dt); // hard brake to a stop
+        lateralVel = 0;
+        const elapsed = now - pitBoxStart;
+        const prog = Math.min(1, elapsed / PIT_DURATION_MS);
+        setPitProgress(prog);
+        if (elapsed >= PIT_DURATION_MS) {
+          pitStopsRef.current += 1;
+          setPitStops(pitStopsRef.current);
+          pitActiveRef.current = false;
+          setPitActive(false);
+          setPitProgress(0);
+          setPitRequested(false);
+          pitRequestedRef.current = false;
+          speed = 6; // released, gentle pit-lane exit speed
+        }
+      }
 
       const keySteer = (leftKey ? 1 : 0) - (rightKey ? 1 : 0);
       const steerInput = keySteer !== 0 ? keySteer : -t.steer;
@@ -1376,6 +1414,13 @@ export default function RacingGame() {
           lapStart = now;
           if (lap > totalLaps && !raceFinished) {
             raceFinished = true;
+          }
+          // Begin a pit stop if requested and the race isn't over yet
+          if (!isQualifying && pitRequestedRef.current && !raceFinished && !pitActiveRef.current) {
+            pitActiveRef.current = true;
+            setPitActive(true);
+            pitBoxStart = now;
+            setPitProgress(0);
           }
         }
       }
@@ -1716,12 +1761,30 @@ export default function RacingGame() {
 
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-        const points = POINTS[position - 1] ?? 0;
+        // Pit-stop penalty: +5s per missed mandatory stop, applied to position
+        const missed = Math.max(0, requiredStops - pitStopsRef.current);
+        const PIT_PENALTY_S = 5;
+        const penaltyS = missed * PIT_PENALTY_S;
+        let adjustedPosition = position;
+        if (penaltyS > 0) {
+          // Re-score by subtracting penalty-equivalent progress from player
+          const penaltyProg = penaltyS / lapTimeEst;
+          const playerProgPenalised = raceProgress - penaltyProg;
+          let dropped = 0;
+          if (!isMulti) {
+            ais.forEach((ai) => {
+              const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+              if ((aiLapEst + ai.t) > playerProgPenalised && (aiLapEst + ai.t) <= raceProgress) dropped += 1;
+            });
+          }
+          adjustedPosition = Math.min(10, position + dropped);
+        }
+        const points = POINTS[adjustedPosition - 1] ?? 0;
         // Record daily-challenge progress for this race
-        const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000);
+        const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000) + penaltyS;
         try {
           recordRace({
-            won: position === 1,
+            won: adjustedPosition === 1,
             topSpeedKmh: sessTopSpeedKmh,
             raceTimeSec: finalRaceTime,
             driftDistanceM: sessDriftDist,
@@ -1738,8 +1801,8 @@ export default function RacingGame() {
             weather_id: weatherId,
             best_lap: Number(bestLap.toFixed(3)),
             race_time_sec: Number(finalRaceTime.toFixed(2)),
-            position,
-            won: position === 1,
+            position: adjustedPosition,
+            won: adjustedPosition === 1,
           }).catch(() => {});
         }
         // Compute final order of every car on the grid
@@ -1758,7 +1821,7 @@ export default function RacingGame() {
         }
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
-        setResult({ position, bestLap, points });
+        setResult({ position: adjustedPosition, bestLap, points });
         if (mode === "career") {
           const cur: CareerSave = loadSave() ?? {
             driverId: driver.id, points: 0, completed: {}, standings: {}, rounds: [],
@@ -1768,7 +1831,7 @@ export default function RacingGame() {
           if (!cur.rounds) cur.rounds = [];
           const prev = cur.completed[track.id];
           const newBest = prev && prev.bestLap > 0 && prev.bestLap < bestLap ? prev.bestLap : bestLap;
-          cur.completed[track.id] = { bestLap: newBest, position, points };
+          cur.completed[track.id] = { bestLap: newBest, position: adjustedPosition, points };
           order.forEach((id, i) => {
             const pts = POINTS[i] ?? 0;
             cur.standings[id] = (cur.standings[id] ?? 0) + pts;
@@ -1940,7 +2003,70 @@ export default function RacingGame() {
             </div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pos</div>
             <div className={`text-xl font-bold ${sessionMode === "qualifying" ? "text-fuchsia-300" : "text-red-400"}`}>P{hud.position}</div>
+            {sessionMode === "race" && (() => {
+              const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
+              if (required === 0) return null;
+              const remaining = Math.max(0, required - pitStops);
+              return (
+                <>
+                  <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pit</div>
+                  <div className="flex gap-1 mt-0.5">
+                    {Array.from({ length: required }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`w-3 h-3 rounded-full border ${i < pitStops ? "bg-emerald-400 border-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-transparent border-white/40"}`}
+                      />
+                    ))}
+                  </div>
+                  {remaining > 0 && pitRequested && !pitActive && (
+                    <div className="text-[9px] text-yellow-300 mt-1 uppercase tracking-widest">Box this lap</div>
+                  )}
+                </>
+              );
+            })()}
           </div>
+
+          {/* PIT button — race only */}
+          {sessionMode === "race" && !pitActive && (() => {
+            const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
+            if (required === 0) return null;
+            const remaining = Math.max(0, required - pitStops);
+            if (remaining === 0) return null;
+            return (
+              <button
+                onClick={() => setPitRequested((p) => !p)}
+                className={`absolute top-4 right-4 z-20 px-4 py-2 font-mono uppercase text-xs tracking-widest border-2 backdrop-blur transition-all
+                  ${pitRequested
+                    ? "bg-yellow-400 text-black border-yellow-200 shadow-[0_0_25px_rgba(250,204,21,0.55)]"
+                    : "bg-black/50 text-white border-white/30 hover:bg-black/70"}`}
+              >
+                {pitRequested ? "BOXING" : "PIT IN"}
+              </button>
+            );
+          })()}
+
+          {/* Cinematic pit-stop overlay */}
+          {pitActive && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/55 backdrop-blur-sm">
+              <div className="text-center font-mono">
+                <div className="text-[10px] uppercase tracking-[0.5em] text-yellow-300 mb-2">Pit Stop In Progress</div>
+                <div className="text-6xl sm:text-7xl font-black text-white tabular-nums drop-shadow-[0_0_30px_rgba(250,204,21,0.6)]">
+                  {(5 - pitProgress * 5).toFixed(1)}s
+                </div>
+                <div className="mt-4 w-72 sm:w-96 mx-auto h-2 bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 transition-[width] duration-100"
+                    style={{ width: `${pitProgress * 100}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-4 text-[9px] uppercase tracking-widest text-white/60">
+                  <div className={pitProgress > 0.15 ? "text-emerald-300" : ""}>● Jack Up</div>
+                  <div className={pitProgress > 0.55 ? "text-emerald-300" : ""}>● New Tires</div>
+                  <div className={pitProgress > 0.9 ? "text-emerald-300" : ""}>● Refuel</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none hidden">
             <div className="text-[10px] uppercase tracking-widest text-white/50">Current</div>
