@@ -513,6 +513,8 @@ export default function RacingGame() {
   // ============ Three.js race loop ============
   useEffect(() => {
     if (screen !== "racing") return;
+    const sessionModeLocal = sessionModeRef.current;
+    const isQualifying = sessionModeLocal === "qualifying";
     const mount = mountRef.current!;
     const width = mount.clientWidth;
     const height = mount.clientHeight;
