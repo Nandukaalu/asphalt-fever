@@ -2163,6 +2163,33 @@ export default function RacingGame() {
           )}
 
           <TouchControls touchRef={touchRef} />
+
+          {introOpen && (() => {
+            const grid: GridDriver[] = (() => {
+              const order = qualifyingGrid && qualifyingGrid.length
+                ? qualifyingGrid
+                : [driver.id, ...DRIVERS.filter(d => d.id !== driver.id).slice(0, 9).map(d => d.id)];
+              return order.map((id) => {
+                const d = allDrivers.find(x => x.id === id) ?? DRIVERS[0];
+                const isPlayer = id === driver.id;
+                return {
+                  id,
+                  name: isPlayer ? (playerName || d.name) : d.name,
+                  team: d.team,
+                  color: `#${d.primary.toString(16).padStart(6, "0")}`,
+                };
+              });
+            })();
+            return (
+              <CinematicIntro
+                trackName={track.name}
+                country={track.country}
+                drivers={grid}
+                playerId={driver.id}
+                onDone={() => setIntroOpen(false)}
+              />
+            );
+          })()}
         </>
       )}
 
