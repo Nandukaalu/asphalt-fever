@@ -2003,6 +2003,70 @@ export default function RacingGame() {
             </div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pos</div>
             <div className={`text-xl font-bold ${sessionMode === "qualifying" ? "text-fuchsia-300" : "text-red-400"}`}>P{hud.position}</div>
+            {sessionMode === "race" && (() => {
+              const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
+              if (required === 0) return null;
+              const remaining = Math.max(0, required - pitStops);
+              return (
+                <>
+                  <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pit</div>
+                  <div className="flex gap-1 mt-0.5">
+                    {Array.from({ length: required }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`w-3 h-3 rounded-full border ${i < pitStops ? "bg-emerald-400 border-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-transparent border-white/40"}`}
+                      />
+                    ))}
+                  </div>
+                  {remaining > 0 && pitRequested && !pitActive && (
+                    <div className="text-[9px] text-yellow-300 mt-1 uppercase tracking-widest">Box this lap</div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+
+          {/* PIT button — race only */}
+          {sessionMode === "race" && !pitActive && (() => {
+            const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
+            if (required === 0) return null;
+            const remaining = Math.max(0, required - pitStops);
+            if (remaining === 0) return null;
+            return (
+              <button
+                onClick={() => setPitRequested((p) => !p)}
+                className={`absolute top-4 right-4 z-20 px-4 py-2 font-mono uppercase text-xs tracking-widest border-2 backdrop-blur transition-all
+                  ${pitRequested
+                    ? "bg-yellow-400 text-black border-yellow-200 shadow-[0_0_25px_rgba(250,204,21,0.55)]"
+                    : "bg-black/50 text-white border-white/30 hover:bg-black/70"}`}
+              >
+                {pitRequested ? "BOXING" : "PIT IN"}
+              </button>
+            );
+          })()}
+
+          {/* Cinematic pit-stop overlay */}
+          {pitActive && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/55 backdrop-blur-sm">
+              <div className="text-center font-mono">
+                <div className="text-[10px] uppercase tracking-[0.5em] text-yellow-300 mb-2">Pit Stop In Progress</div>
+                <div className="text-6xl sm:text-7xl font-black text-white tabular-nums drop-shadow-[0_0_30px_rgba(250,204,21,0.6)]">
+                  {(5 - pitProgress * 5).toFixed(1)}s
+                </div>
+                <div className="mt-4 w-72 sm:w-96 mx-auto h-2 bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 transition-[width] duration-100"
+                    style={{ width: `${pitProgress * 100}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-4 text-[9px] uppercase tracking-widest text-white/60">
+                  <div className={pitProgress > 0.15 ? "text-emerald-300" : ""}>● Jack Up</div>
+                  <div className={pitProgress > 0.55 ? "text-emerald-300" : ""}>● New Tires</div>
+                  <div className={pitProgress > 0.9 ? "text-emerald-300" : ""}>● Refuel</div>
+                </div>
+              </div>
+            </div>
+          )}
           </div>
 
           <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none hidden">
