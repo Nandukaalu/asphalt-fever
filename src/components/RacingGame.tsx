@@ -770,6 +770,117 @@ export default function RacingGame() {
     startLine.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
     scene.add(startLine);
 
+    // ===== Pit lane + pit boxes (parallel strip on +n side of start/finish) =====
+    const pitN = new THREE.Vector3(-sfTan.z, 0, sfTan.x); // outward normal at start
+    const pitForward = new THREE.Vector3(sfTan.x, 0, sfTan.z); // along racing direction
+    const pitOffset = TRACK_WIDTH / 2 + 7;
+    const pitCenter = curve.getPointAt(0).clone().addScaledVector(pitN, pitOffset);
+    const pitHeading = Math.atan2(sfTan.x, sfTan.z); // matches startHeading convention
+    // Pit lane asphalt strip
+    const pitStripGeo = new THREE.PlaneGeometry(60, 6);
+    const pitStrip = new THREE.Mesh(
+      pitStripGeo,
+      new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.85, metalness: 0.05 }),
+    );
+    pitStrip.rotation.x = -Math.PI / 2;
+    pitStrip.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+    pitStrip.position.copy(pitCenter).setY(0.04);
+    pitStrip.receiveShadow = true;
+    scene.add(pitStrip);
+    // White lane edge stripes
+    for (const side of [-1, 1]) {
+      const stripe = new THREE.Mesh(
+        new THREE.PlaneGeometry(60, 0.18),
+        new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      );
+      stripe.rotation.x = -Math.PI / 2;
+      stripe.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+      stripe.position.copy(pitCenter).addScaledVector(pitN, side * 3).setY(0.05);
+      scene.add(stripe);
+    }
+    // Three pit boxes (white squares) + small garage walls behind
+    const garageMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.7, metalness: 0.3, emissive: 0x22d3ee, emissiveIntensity: 0.05 });
+    const pitBoxPositions: THREE.Vector3[] = [];
+    for (let i = -1; i <= 1; i++) {
+      const center = pitCenter.clone().addScaledVector(pitForward, i * 9);
+      pitBoxPositions.push(center.clone());
+      // Box outline (white square)
+      const box = new THREE.Mesh(
+        new THREE.PlaneGeometry(5.4, 5.4),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18 }),
+      );
+      box.rotation.x = -Math.PI / 2;
+      box.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+      box.position.copy(center).addScaledVector(pitN, 0).setY(0.06);
+      scene.add(box);
+      // Garage wall behind box
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 1.2), garageMat);
+      wall.position.copy(center).addScaledVector(pitN, 4.2).setY(2);
+      wall.lookAt(center.x, 2, center.z);
+      wall.castShadow = true;
+      scene.add(wall);
+      // Garage number light strip
+      const lite = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 0.15, 0.05),
+        new THREE.MeshBasicMaterial({ color: i === 0 ? 0xff6a1a : 0x22d3ee }),
+      );
+      lite.position.copy(center).addScaledVector(pitN, 3.7).setY(3.4);
+      lite.lookAt(center.x, 3.4, center.z);
+      scene.add(lite);
+    }
+    // Player's box = middle one
+    const pitBoxPos = pitBoxPositions[1].clone();
+    const pitBoxHeading = pitHeading;
+
+    // ===== Pit crew + jack + spare tires (animated during pit stop) =====
+    const pitCrewGroup = new THREE.Group();
+    pitCrewGroup.visible = false;
+    scene.add(pitCrewGroup);
+    // Jack (low slim red box that lifts the car)
+    const jack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.15, 1.6),
+      new THREE.MeshStandardMaterial({ color: 0xff1a1a, emissive: 0x550000, roughness: 0.4 }),
+    );
+    jack.castShadow = true;
+    pitCrewGroup.add(jack);
+    // 2 crew capsules (orange suits) on each side
+    const crewMembers: THREE.Group[] = [];
+    const suit = new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: 0.5, emissive: 0x331100, emissiveIntensity: 0.5 });
+    const helmet = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+    for (let i = 0; i < 4; i++) {
+      const cm = new THREE.Group();
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.7, 0.3), suit);
+      torso.position.y = 0.65; torso.castShadow = true; cm.add(torso);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), helmet);
+      head.position.y = 1.15; head.castShadow = true; cm.add(head);
+      const legs = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.25), suit);
+      legs.position.y = 0.3; cm.add(legs);
+      pitCrewGroup.add(cm);
+      crewMembers.push(cm);
+    }
+    // Spare tire stacks on each side (4 fresh tires shown swapping in)
+    const spareTireMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.95 });
+    const spareTires: THREE.Mesh[] = [];
+    for (let i = 0; i < 4; i++) {
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.32, 16), spareTireMat);
+      t.rotation.z = Math.PI / 2;
+      pitCrewGroup.add(t);
+      spareTires.push(t);
+    }
+    // Place the pit crew group at the player's box, oriented along pit lane
+    pitCrewGroup.position.copy(pitBoxPos);
+    pitCrewGroup.rotation.y = pitBoxHeading;
+    // Local placement of jack/crew/tires (relative to car at pit box, facing +Z forward)
+    jack.position.set(0, 0.08, 0); // under car center
+    crewMembers[0].position.set(-1.4, 0, 1.2);  // front-left
+    crewMembers[1].position.set(1.4, 0, 1.2);   // front-right
+    crewMembers[2].position.set(-1.4, 0, -1.2); // rear-left
+    crewMembers[3].position.set(1.4, 0, -1.2);  // rear-right
+    crewMembers.forEach((c) => c.lookAt(0, 0.5, 0));
+
+    // Track pit lift Y for the player car (set by animate loop)
+    let pitLiftY = 0;
+
     // Grandstands (dark with neon edge)
     const standMat = new THREE.MeshStandardMaterial({ color: 0x1a1428, roughness: 0.6, metalness: 0.4, emissive: 0x22d3ee, emissiveIntensity: 0.08 });
     for (let i = 0; i < 14; i++) {
@@ -1345,11 +1456,69 @@ export default function RacingGame() {
 
       // ---------- Pit stop in progress: hold car in box, run timer ----------
       if (inPit) {
-        speed *= Math.pow(0.001, dt); // hard brake to a stop
+        speed = 0;
         lateralVel = 0;
         const elapsed = now - pitBoxStart;
         const prog = Math.min(1, elapsed / PIT_DURATION_MS);
         setPitProgress(prog);
+        // Drive into pit box, get serviced, drive back out
+        pitCrewGroup.visible = prog > 0.12 && prog < 0.92;
+        if (prog < 0.18) {
+          // Phase 1: glide diagonally into the pit box
+          const k = Math.min(1, dt * 4);
+          carPos.x += (pitBoxPos.x - carPos.x) * k;
+          carPos.z += (pitBoxPos.z - carPos.z) * k;
+          // Rotate heading toward pit heading
+          let dh = pitBoxHeading - heading;
+          while (dh > Math.PI) dh -= Math.PI * 2;
+          while (dh < -Math.PI) dh += Math.PI * 2;
+          heading += dh * Math.min(1, dt * 5);
+          pitLiftY = 0;
+        } else if (prog < 0.85) {
+          // Phase 2: serviced — locked in box, jack lifts car, tires swap
+          carPos.x = pitBoxPos.x;
+          carPos.z = pitBoxPos.z;
+          heading = pitBoxHeading;
+          const lp = (prog - 0.18) / 0.67; // 0..1
+          let lift = 0;
+          if (lp < 0.18) lift = (lp / 0.18) * 0.32;
+          else if (lp > 0.82) lift = ((1 - lp) / 0.18) * 0.32;
+          else lift = 0.32;
+          pitLiftY = lift;
+          jack.position.y = 0.08 + lift * 0.6;
+          jack.scale.y = 1 + lift * 2.2;
+          // Tire swap window: hide old wheels, show fresh tires moving in
+          const swapping = lp > 0.35 && lp < 0.65;
+          player.wheels.forEach((w) => (w.visible = !swapping));
+          // Animate spare tires flying into wheel positions
+          const wp: [number, number][] = [[-0.75, 1.3], [0.75, 1.3], [-0.78, -1.3], [0.78, -1.3]];
+          spareTires.forEach((tt, i) => {
+            const target = wp[i];
+            const startX = target[0] * 2.2;
+            const t01 = swapping ? (lp - 0.35) / 0.3 : (lp < 0.35 ? 0 : 1);
+            tt.visible = lp > 0.3 && lp < 0.7;
+            tt.position.set(
+              startX + (target[0] - startX) * t01,
+              0.36 + lift,
+              target[1],
+            );
+          });
+          // Crew bobbing while working
+          crewMembers.forEach((c, i) => {
+            c.position.y = Math.abs(Math.sin(now * 0.012 + i)) * 0.08;
+          });
+        } else {
+          // Phase 3: jack down, drive out of pit lane back onto track
+          pitLiftY = 0;
+          jack.position.y = 0.08;
+          jack.scale.y = 1;
+          spareTires.forEach((tt) => (tt.visible = false));
+          player.wheels.forEach((w) => (w.visible = true));
+          const exit = curve.getPointAt(0.04);
+          const k = Math.min(1, dt * 4);
+          carPos.x += (exit.x - carPos.x) * k;
+          carPos.z += (exit.z - carPos.z) * k;
+        }
         if (elapsed >= PIT_DURATION_MS) {
           pitStopsRef.current += 1;
           setPitStops(pitStopsRef.current);
@@ -1358,7 +1527,11 @@ export default function RacingGame() {
           setPitProgress(0);
           setPitRequested(false);
           pitRequestedRef.current = false;
-          speed = 6; // released, gentle pit-lane exit speed
+          speed = 8;
+          pitLiftY = 0;
+          pitCrewGroup.visible = false;
+          spareTires.forEach((tt) => (tt.visible = false));
+          player.wheels.forEach((w) => (w.visible = true));
         }
       }
 
@@ -1373,7 +1546,7 @@ export default function RacingGame() {
       speed = Math.max(-15, Math.min(MAX_SPEED, speed));
 
       const ct = closestT(carPos);
-      if (ct.dist > TRACK_WIDTH / 2 + 1.5) {
+      if (!inPit && ct.dist > TRACK_WIDTH / 2 + 1.5) {
         speed -= Math.sign(speed) * Math.min(Math.abs(speed), OFF_TRACK_DRAG * dt);
       }
 
@@ -1396,7 +1569,7 @@ export default function RacingGame() {
 
       // Wall collision: push back inside, lose speed
       const ct2 = closestT(carPos);
-      if (ct2.dist > WALL_LIMIT) {
+      if (!inPit && ct2.dist > WALL_LIMIT) {
         const center = centerline[ct2.idx];
         const dx = carPos.x - center.x;
         const dz = carPos.z - center.z;
@@ -1421,7 +1594,7 @@ export default function RacingGame() {
         }
       }
 
-      player.group.position.set(carPos.x, 0, carPos.z);
+      player.group.position.set(carPos.x, pitLiftY, carPos.z);
       player.group.rotation.y = heading;
 
       const wheelSpin = (speed * dt) / 0.36;
@@ -2095,11 +2268,14 @@ export default function RacingGame() {
             if (remaining === 0) return null;
             return (
               <button
-                onClick={() => setPitRequested((p) => !p)}
-                className={`absolute top-4 right-4 z-20 px-4 py-2 font-mono uppercase text-xs tracking-widest border-2 backdrop-blur transition-all
+                type="button"
+                onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); setPitRequested((p) => !p); }}
+                onClick={(e) => { e.stopPropagation(); }}
+                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                className={`absolute top-3 right-3 z-40 min-h-[48px] min-w-[96px] px-5 py-3 font-mono uppercase text-sm font-bold tracking-widest border-2 backdrop-blur transition-all select-none active:scale-95
                   ${pitRequested
                     ? "bg-yellow-400 text-black border-yellow-200 shadow-[0_0_25px_rgba(250,204,21,0.55)]"
-                    : "bg-black/50 text-white border-white/30 hover:bg-black/70"}`}
+                    : "bg-black/60 text-white border-white/40 hover:bg-black/80"}`}
               >
                 {pitRequested ? "BOXING" : "PIT IN"}
               </button>
