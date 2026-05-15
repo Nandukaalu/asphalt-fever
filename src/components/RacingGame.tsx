@@ -1908,6 +1908,39 @@ export default function RacingGame() {
       {showDaily && <DailyHub onClose={() => setShowDaily(false)} />}
       {showLeaderboard && <Leaderboard onClose={() => setShowLeaderboard(false)} tracks={allTracks.map((t) => ({ id: t.id, name: t.name }))} />}
       {showReplay && replayData && <ReplayViewer data={replayData} onClose={() => setShowReplay(false)} />}
+      {showFriends && <FriendsPanel onClose={() => setShowFriends(false)} />}
+
+      {/* Top-right account/friends bar (visible on menu) */}
+      {screen === "menu" && (
+        <div className="absolute top-3 right-3 z-40 flex items-center gap-2">
+          {user ? (
+            <>
+              <button
+                onClick={() => setShowFriends(true)}
+                className="flex items-center gap-1.5 bg-black/60 backdrop-blur border border-white/15 px-3 py-1.5 text-xs uppercase tracking-widest text-white hover:border-red-500"
+              >
+                <Users size={14}/> Friends
+              </button>
+              <div className="bg-black/60 backdrop-blur border border-white/15 px-3 py-1.5 text-xs text-white/80">
+                @{profile?.username ?? "racer"}
+              </div>
+              <button
+                onClick={() => signOut()}
+                className="bg-black/60 backdrop-blur border border-white/15 px-3 py-1.5 text-xs uppercase tracking-widest text-white/70 hover:text-white"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/auth"
+              className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 text-xs uppercase tracking-widest font-bold"
+            >
+              Sign in
+            </Link>
+          )}
+        </div>
+      )}
 
       {screen === "multi" && (
         <MultiplayerEntry
