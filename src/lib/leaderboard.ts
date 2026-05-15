@@ -24,6 +24,7 @@ export async function fetchTopByLap(opts: { trackId?: string; sinceISO?: string;
     .order("best_lap", { ascending: true })
     .limit(opts.limit ?? 50);
   if (opts.trackId && opts.trackId !== "all") q = q.eq("track_id", opts.trackId);
+  else q = q.not("track_id", "like", "custom-%");
   if (opts.sinceISO) q = q.gte("created_at", opts.sinceISO);
   const { data, error } = await q;
   if (error) throw error;
