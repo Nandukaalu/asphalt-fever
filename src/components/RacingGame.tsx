@@ -8,6 +8,7 @@ import Leaderboard from "./Leaderboard";
 import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
 import { submitLeaderboard } from "@/lib/leaderboard";
 import LiveTiming, { type LiveEntry } from "./LiveTiming";
+import Qualifying from "./Qualifying";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -342,7 +343,10 @@ export default function RacingGame() {
   const [liveBoard, setLiveBoard] = useState<LiveEntry[]>([]);
   const [fastestLapTime, setFastestLapTime] = useState<number>(0);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
+  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "qualifying" | "racing" | "result">("menu");
+  const [qualifyingGrid, setQualifyingGrid] = useState<string[] | null>(null);
+  const qualifyingGridRef = useRef<string[] | null>(null);
+  useEffect(() => { qualifyingGridRef.current = qualifyingGrid; }, [qualifyingGrid]);
   const [mode, setMode] = useState<Mode>("quick");
   const [customDrivers, setCustomDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
@@ -1087,9 +1091,13 @@ export default function RacingGame() {
       };
     }
     const isMulti = mode === "multi";
+    const qGrid = qualifyingGridRef.current;
     let playerSlot = 4;
     if (isMulti) {
       const idx = lobbyPlayers.findIndex((p) => p.id === playerIdRef.current);
+      playerSlot = idx >= 0 ? idx : 0;
+    } else if (qGrid && qGrid.length) {
+      const idx = qGrid.indexOf(driver.id);
       playerSlot = idx >= 0 ? idx : 0;
     }
     const pSlot = gridSlot(playerSlot);
@@ -1112,9 +1120,12 @@ export default function RacingGame() {
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
     const ais: (AI & { driver: Driver; offset: number })[] = [];
     if (!isMulti) {
-      const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
+      // Order AI by qualifying grid (skip player); fall back to default order.
+      const ordered = qGrid && qGrid.length
+        ? qGrid.map((id) => DRIVERS.find((d) => d.id === id)).filter((d): d is Driver => !!d && d.id !== driver.id)
+        : DRIVERS.filter((d) => d.id !== driver.id);
       let next = 0;
-      otherDrivers.forEach((d) => {
+      ordered.forEach((d) => {
         if (next === playerSlot) next++;
         const slot = next++;
         const g = gridSlot(slot);
@@ -1835,10 +1846,21 @@ export default function RacingGame() {
           onBack={() => setScreen("driver")}
           onStart={() => {
             if (mode === "multi") setScreen("lobby");
-            else { setResult(null); setScreen("racing"); }
+            else { setResult(null); setQualifyingGrid(null); setScreen("qualifying"); }
           }}
         />
         </>
+      )}
+
+      {screen === "qualifying" && (
+        <Qualifying
+          drivers={DRIVERS}
+          playerDriverId={driver.id}
+          playerName={playerName}
+          trackName={track.name}
+          onComplete={(grid) => { setQualifyingGrid(grid); setScreen("racing"); }}
+          onCancel={() => setScreen("track")}
+        />
       )}
 
       {screen === "editor" && (
