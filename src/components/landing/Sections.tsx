@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import Reveal from "./Reveal";
+import { supabase } from "@/integrations/supabase/client";
 
 export function SectionTitle({ kicker, title, subtitle }: { kicker: string; title: React.ReactNode; subtitle?: string }) {
   return (
@@ -74,39 +76,84 @@ export function CarsSection() {
   );
 }
 
-const LEADERS = [
-  { rank: 1, name: "Nyx_22", lap: "1:22.418", track: "Monza" },
-  { rank: 2, name: "Apex.GT", lap: "1:23.107", track: "Spa" },
-  { rank: 3, name: "DriftKing", lap: "1:23.812", track: "Suzuka" },
-  { rank: 4, name: "VioletStorm", lap: "1:24.044", track: "COTA" },
-  { rank: 5, name: "ChronoRush", lap: "1:24.502", track: "Interlagos" },
+const STANDARD_TRACKS: { id: string; name: string }[] = [
+  { id: "silverstone", name: "Silverstone" },
+  { id: "monza", name: "Monza" },
+  { id: "monaco", name: "Monaco" },
+  { id: "spa", name: "Spa" },
+  { id: "suzuka", name: "Suzuka" },
+  { id: "interlagos", name: "Interlagos" },
+  { id: "cota", name: "COTA" },
+  { id: "singapore", name: "Singapore" },
+  { id: "bahrain", name: "Bahrain" },
 ];
 
+function formatLap(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = sec - m * 60;
+  return `${m}:${s.toFixed(3).padStart(6, "0")}`;
+}
+
+type BestRow = { trackId: string; trackName: string; player: string | null; lap: number | null };
+
 export function LeaderboardSection() {
+  const [rows, setRows] = useState<BestRow[]>(
+    STANDARD_TRACKS.map((t) => ({ trackId: t.id, trackName: t.name, player: null, lap: null }))
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const ids = STANDARD_TRACKS.map((t) => t.id);
+      const { data } = await supabase
+        .from("leaderboard_entries")
+        .select("player_name, best_lap, track_id")
+        .in("track_id", ids)
+        .order("best_lap", { ascending: true })
+        .limit(2000);
+      if (cancelled) return;
+      const best = new Map<string, { player: string; lap: number }>();
+      for (const r of data ?? []) {
+        if (!best.has(r.track_id)) best.set(r.track_id, { player: r.player_name, lap: Number(r.best_lap) });
+      }
+      setRows(STANDARD_TRACKS.map((t) => {
+        const b = best.get(t.id);
+        return { trackId: t.id, trackName: t.name, player: b?.player ?? null, lap: b?.lap ?? null };
+      }));
+    };
+    load();
+    const ch = supabase
+      .channel("home-lb")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "leaderboard_entries" }, () => load())
+      .subscribe();
+    return () => { cancelled = true; supabase.removeChannel(ch); };
+  }, []);
+
   return (
     <section id="leaderboard" className="relative py-24 sm:py-32 bg-gradient-to-b from-transparent via-secondary/30 to-transparent">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-[1fr_1.2fr] gap-10 items-start">
         <SectionTitle
           kicker="Global Standings"
-          title={<>Every Tenth <span className="text-gradient-accent">Counts.</span></>}
-          subtitle="Live lap times from drivers around the world. Climb the ranks. Defend your podium."
+          title={<>Track Record <span className="text-gradient-accent">Holders.</span></>}
+          subtitle="The fastest lap ever set on every official circuit. Live from the global leaderboard."
         />
         <Reveal>
           <div className="glass rounded-3xl overflow-hidden">
-            <div className="grid grid-cols-[60px_1fr_120px_120px] px-5 py-3 text-[10px] sm:text-xs uppercase tracking-widest text-muted-foreground border-b border-border/40">
-              <span>Pos</span><span>Driver</span><span className="hidden sm:block">Track</span><span className="text-right">Best Lap</span>
+            <div className="grid grid-cols-[1fr_1fr_110px] sm:grid-cols-[140px_1fr_120px] px-5 py-3 text-[10px] sm:text-xs uppercase tracking-widest text-muted-foreground border-b border-border/40">
+              <span>Track</span><span>Holder</span><span className="text-right">Best Lap</span>
             </div>
-            {LEADERS.map((l) => (
+            {rows.map((r) => (
               <div
-                key={l.rank}
-                className="grid grid-cols-[60px_1fr_120px_120px] px-5 py-4 items-center border-b border-border/20 hover:bg-primary/5 transition-colors"
+                key={r.trackId}
+                className="grid grid-cols-[1fr_1fr_110px] sm:grid-cols-[140px_1fr_120px] px-5 py-4 items-center border-b border-border/20 hover:bg-primary/5 transition-colors"
               >
-                <span className={`font-display text-xl ${l.rank === 1 ? "text-gradient-primary" : "text-muted-foreground"}`}>
-                  {String(l.rank).padStart(2, "0")}
+                <span className="font-display uppercase tracking-wider text-sm sm:text-base text-gradient-primary">{r.trackName}</span>
+                <span className="font-display tracking-wider truncate">
+                  {r.player ?? <span className="text-muted-foreground/60">Unclaimed</span>}
                 </span>
-                <span className="font-display tracking-wider">{l.name}</span>
-                <span className="hidden sm:block text-sm text-muted-foreground">{l.track}</span>
-                <span className="text-right font-mono text-sm sm:text-base text-foreground">{l.lap}</span>
+                <span className="text-right font-mono text-sm sm:text-base text-foreground">
+                  {r.lap != null ? formatLap(r.lap) : <span className="text-muted-foreground/60">—</span>}
+                </span>
               </div>
             ))}
           </div>
