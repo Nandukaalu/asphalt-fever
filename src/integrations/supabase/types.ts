@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      friendships: {
+        Row: {
+          addressee_id: string
+          created_at: string
+          id: string
+          requester_id: string
+          status: Database["public"]["Enums"]["friendship_status"]
+          updated_at: string
+        }
+        Insert: {
+          addressee_id: string
+          created_at?: string
+          id?: string
+          requester_id: string
+          status?: Database["public"]["Enums"]["friendship_status"]
+          updated_at?: string
+        }
+        Update: {
+          addressee_id?: string
+          created_at?: string
+          id?: string
+          requester_id?: string
+          status?: Database["public"]["Enums"]["friendship_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       leaderboard_entries: {
         Row: {
           best_lap: number
@@ -53,15 +80,122 @@ export type Database = {
         }
         Relationships: []
       }
+      lobby_members: {
+        Row: {
+          id: string
+          joined_at: string
+          lobby_id: string
+          ready: boolean
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          lobby_id: string
+          ready?: boolean
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          lobby_id?: string
+          ready?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lobby_members_lobby_id_fkey"
+            columns: ["lobby_id"]
+            isOneToOne: false
+            referencedRelation: "race_lobbies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      race_lobbies: {
+        Row: {
+          created_at: string
+          host_id: string
+          id: string
+          invite_code: string
+          laps: number
+          max_players: number
+          name: string
+          status: string
+          track_id: string
+          updated_at: string
+          weather_id: string
+        }
+        Insert: {
+          created_at?: string
+          host_id: string
+          id?: string
+          invite_code: string
+          laps?: number
+          max_players?: number
+          name: string
+          status?: string
+          track_id?: string
+          updated_at?: string
+          weather_id?: string
+        }
+        Update: {
+          created_at?: string
+          host_id?: string
+          id?: string
+          invite_code?: string
+          laps?: number
+          max_players?: number
+          name?: string
+          status?: string
+          track_id?: string
+          updated_at?: string
+          weather_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_lobby_member: {
+        Args: { _lobby: string; _user: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      friendship_status: "pending" | "accepted" | "blocked"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -188,6 +322,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      friendship_status: ["pending", "accepted", "blocked"],
+    },
   },
 } as const
