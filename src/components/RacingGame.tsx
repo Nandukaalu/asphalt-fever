@@ -8,6 +8,11 @@ import Leaderboard from "./Leaderboard";
 import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
 import { submitLeaderboard } from "@/lib/leaderboard";
 import LiveTiming, { type LiveEntry } from "./LiveTiming";
+import { CinematicIntro, type GridDriver } from "./CinematicIntro";
+import { FriendsPanel } from "./Friends";
+import { useAuth } from "@/hooks/useAuth";
+import { Link } from "@tanstack/react-router";
+import { Users } from "lucide-react";
 
 // ---------------- Types ----------------
 type Driver = {
