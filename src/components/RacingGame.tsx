@@ -1795,7 +1795,7 @@ export default function RacingGame() {
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen]);
+  }, [screen, sessionMode]);
 
   // ---------------- Render ----------------
   return (
