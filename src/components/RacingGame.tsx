@@ -1308,11 +1308,31 @@ export default function RacingGame() {
       }
 
       const t = touchRef.current;
-      const accel = !raceFinished && (keys["w"] || keys["arrowup"] || t.accel);
-      const brake = !raceFinished && (keys["s"] || keys["arrowdown"] || t.brake);
+      const inPit = pitActiveRef.current;
+      const accel = !raceFinished && !inPit && (keys["w"] || keys["arrowup"] || t.accel);
+      const brake = !raceFinished && !inPit && (keys["s"] || keys["arrowdown"] || t.brake);
       const leftKey = keys["a"] || keys["arrowleft"];
       const rightKey = keys["d"] || keys["arrowright"];
-      const handbrake = keys[" "] || t.handbrake;
+      const handbrake = !inPit && (keys[" "] || t.handbrake);
+
+      // ---------- Pit stop in progress: hold car in box, run timer ----------
+      if (inPit) {
+        speed *= Math.pow(0.001, dt); // hard brake to a stop
+        lateralVel = 0;
+        const elapsed = now - pitBoxStart;
+        const prog = Math.min(1, elapsed / PIT_DURATION_MS);
+        setPitProgress(prog);
+        if (elapsed >= PIT_DURATION_MS) {
+          pitStopsRef.current += 1;
+          setPitStops(pitStopsRef.current);
+          pitActiveRef.current = false;
+          setPitActive(false);
+          setPitProgress(0);
+          setPitRequested(false);
+          pitRequestedRef.current = false;
+          speed = 6; // released, gentle pit-lane exit speed
+        }
+      }
 
       const keySteer = (leftKey ? 1 : 0) - (rightKey ? 1 : 0);
       const steerInput = keySteer !== 0 ? keySteer : -t.steer;
