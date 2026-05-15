@@ -2270,11 +2270,14 @@ export default function RacingGame() {
             if (remaining === 0) return null;
             return (
               <button
-                onClick={() => setPitRequested((p) => !p)}
-                className={`absolute top-4 right-4 z-20 px-4 py-2 font-mono uppercase text-xs tracking-widest border-2 backdrop-blur transition-all
+                type="button"
+                onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); setPitRequested((p) => !p); }}
+                onClick={(e) => { e.stopPropagation(); }}
+                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                className={`absolute top-3 right-3 z-40 min-h-[48px] min-w-[96px] px-5 py-3 font-mono uppercase text-sm font-bold tracking-widest border-2 backdrop-blur transition-all select-none active:scale-95
                   ${pitRequested
                     ? "bg-yellow-400 text-black border-yellow-200 shadow-[0_0_25px_rgba(250,204,21,0.55)]"
-                    : "bg-black/50 text-white border-white/30 hover:bg-black/70"}`}
+                    : "bg-black/60 text-white border-white/40 hover:bg-black/80"}`}
               >
                 {pitRequested ? "BOXING" : "PIT IN"}
               </button>
