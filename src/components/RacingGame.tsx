@@ -1281,7 +1281,7 @@ export default function RacingGame() {
       if (preRace) {
         const remaining = Math.ceil((raceStartAt - now) / 1000);
         const shown = remaining > 0 ? remaining : 0; // 0 == GO
-        if (shown !== lastCountdownShown) {
+        if (shown !== lastCountdownShown && shown <= 3) {
           lastCountdownShown = shown;
           setCountdown(shown);
         }
