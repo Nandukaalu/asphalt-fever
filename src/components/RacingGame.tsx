@@ -342,6 +342,7 @@ function writeSave(s: CareerSave) {
 
 // ---------------- Component ----------------
 export default function RacingGame() {
+  const { user, profile, signOut } = useAuth();
   const mountRef = useRef<HTMLDivElement>(null);
   const [hud, setHud] = useState({ speed: 0, gear: 1, lap: 1, totalLaps: 3, lapTime: 0, bestLap: 0, position: 1 });
   const [liveBoard, setLiveBoard] = useState<LiveEntry[]>([]);
