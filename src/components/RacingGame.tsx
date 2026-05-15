@@ -401,6 +401,17 @@ export default function RacingGame() {
   }, [playerName]);
 
   useEffect(() => { setCareer(loadSave()); }, []);
+
+  // Trigger cinematic intro when entering single-player race (not qualifying, not multi)
+  useEffect(() => {
+    if (screen !== "racing") return;
+    if (sessionMode !== "race") return;
+    if (mode === "multi") return;
+    introMsRef.current = 5500;
+    setIntroOpen(true);
+    const t = setTimeout(() => setIntroOpen(false), 5400);
+    return () => clearTimeout(t);
+  }, [screen, sessionMode, mode]);
   useEffect(() => { setCustomTracks(loadCustomTracks()); }, []);
   useEffect(() => {
     const apply = () => {
