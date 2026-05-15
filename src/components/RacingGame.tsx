@@ -1652,18 +1652,29 @@ export default function RacingGame() {
             });
           });
         }
-        rows.sort((a, b) => b.progress - a.progress);
+        if (isQualifying) {
+          // Sort by best lap ascending (no lap = bottom)
+          rows.sort((a, b) => (a.bestLap ?? 9999) - (b.bestLap ?? 9999));
+        } else {
+          rows.sort((a, b) => b.progress - a.progress);
+        }
         const leaderProg = rows[0]?.progress ?? 0;
+        const poleLap = isQualifying ? rows[0]?.bestLap : undefined;
         // Fastest lap across the field
         let fl = 0;
         rows.forEach((r) => { if (r.bestLap && (fl === 0 || r.bestLap < fl)) fl = r.bestLap; });
         const entries: LiveEntry[] = rows.map((r, i) => {
-          const dProg = leaderProg - r.progress;
           let gap = "—";
-          if (i > 0) {
-            const lapsBehind = Math.floor(dProg);
-            if (lapsBehind >= 1) gap = `+${lapsBehind} LAP`;
-            else gap = `+${(dProg * lapTimeEst).toFixed(2)}`;
+          if (isQualifying) {
+            if (r.bestLap === undefined) gap = "NO TIME";
+            else if (i > 0 && poleLap) gap = `+${(r.bestLap - poleLap).toFixed(3)}`;
+          } else {
+            const dProg = leaderProg - r.progress;
+            if (i > 0) {
+              const lapsBehind = Math.floor(dProg);
+              if (lapsBehind >= 1) gap = `+${lapsBehind} LAP`;
+              else gap = `+${(dProg * lapTimeEst).toFixed(2)}`;
+            }
           }
           return {
             id: r.id, name: r.name, team: r.team, color: r.color, number: r.number,
