@@ -360,6 +360,9 @@ export default function RacingGame() {
   const [sessionMode, setSessionMode] = useState<"qualifying" | "race">("race");
   const sessionModeRef = useRef<"qualifying" | "race">("race");
   useEffect(() => { sessionModeRef.current = sessionMode; }, [sessionMode]);
+  // Cinematic race intro
+  const [introOpen, setIntroOpen] = useState(false);
+  const introMsRef = useRef<number>(0);
   const [mode, setMode] = useState<Mode>("quick");
   const [customDrivers, setCustomDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
