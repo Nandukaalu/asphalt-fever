@@ -1546,7 +1546,7 @@ export default function RacingGame() {
       speed = Math.max(-15, Math.min(MAX_SPEED, speed));
 
       const ct = closestT(carPos);
-      if (ct.dist > TRACK_WIDTH / 2 + 1.5) {
+      if (!inPit && ct.dist > TRACK_WIDTH / 2 + 1.5) {
         speed -= Math.sign(speed) * Math.min(Math.abs(speed), OFF_TRACK_DRAG * dt);
       }
 
@@ -1569,7 +1569,7 @@ export default function RacingGame() {
 
       // Wall collision: push back inside, lose speed
       const ct2 = closestT(carPos);
-      if (ct2.dist > WALL_LIMIT) {
+      if (!inPit && ct2.dist > WALL_LIMIT) {
         const center = centerline[ct2.idx];
         const dx = carPos.x - center.x;
         const dz = carPos.z - center.z;
