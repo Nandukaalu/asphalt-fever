@@ -8,7 +8,6 @@ import Leaderboard from "./Leaderboard";
 import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
 import { submitLeaderboard } from "@/lib/leaderboard";
 import LiveTiming, { type LiveEntry } from "./LiveTiming";
-import Qualifying from "./Qualifying";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -343,10 +342,13 @@ export default function RacingGame() {
   const [liveBoard, setLiveBoard] = useState<LiveEntry[]>([]);
   const [fastestLapTime, setFastestLapTime] = useState<number>(0);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "qualifying" | "racing" | "result">("menu");
+  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [qualifyingGrid, setQualifyingGrid] = useState<string[] | null>(null);
   const qualifyingGridRef = useRef<string[] | null>(null);
   useEffect(() => { qualifyingGridRef.current = qualifyingGrid; }, [qualifyingGrid]);
+  const [sessionMode, setSessionMode] = useState<"qualifying" | "race">("race");
+  const sessionModeRef = useRef<"qualifying" | "race">("race");
+  useEffect(() => { sessionModeRef.current = sessionMode; }, [sessionMode]);
   const [mode, setMode] = useState<Mode>("quick");
   const [customDrivers, setCustomDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
