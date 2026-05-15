@@ -1415,6 +1415,13 @@ export default function RacingGame() {
           if (lap > totalLaps && !raceFinished) {
             raceFinished = true;
           }
+          // Begin a pit stop if requested and the race isn't over yet
+          if (!isQualifying && pitRequestedRef.current && !raceFinished && !pitActiveRef.current) {
+            pitActiveRef.current = true;
+            setPitActive(true);
+            pitBoxStart = now;
+            setPitProgress(0);
+          }
         }
       }
       prevT = ct2.t;
