@@ -2067,7 +2067,6 @@ export default function RacingGame() {
               </div>
             </div>
           )}
-          </div>
 
           <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none hidden">
             <div className="text-[10px] uppercase tracking-widest text-white/50">Current</div>
