@@ -880,7 +880,6 @@ export default function RacingGame() {
 
     // Track pit lift Y for the player car (set by animate loop)
     let pitLiftY = 0;
-    let freshTiresFlash = false;
 
     // Grandstands (dark with neon edge)
     const standMat = new THREE.MeshStandardMaterial({ color: 0x1a1428, roughness: 0.6, metalness: 0.4, emissive: 0x22d3ee, emissiveIntensity: 0.08 });
@@ -1490,7 +1489,6 @@ export default function RacingGame() {
           jack.scale.y = 1 + lift * 2.2;
           // Tire swap window: hide old wheels, show fresh tires moving in
           const swapping = lp > 0.35 && lp < 0.65;
-          freshTiresFlash = swapping;
           player.wheels.forEach((w) => (w.visible = !swapping));
           // Animate spare tires flying into wheel positions
           const wp: [number, number][] = [[-0.75, 1.3], [0.75, 1.3], [-0.78, -1.3], [0.78, -1.3]];
