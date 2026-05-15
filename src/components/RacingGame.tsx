@@ -1848,21 +1848,15 @@ export default function RacingGame() {
           onBack={() => setScreen("driver")}
           onStart={() => {
             if (mode === "multi") setScreen("lobby");
-            else { setResult(null); setQualifyingGrid(null); setScreen("qualifying"); }
+            else {
+              setResult(null);
+              setQualifyingGrid(null);
+              setSessionMode("qualifying");
+              setScreen("racing");
+            }
           }}
         />
         </>
-      )}
-
-      {screen === "qualifying" && (
-        <Qualifying
-          drivers={DRIVERS}
-          playerDriverId={driver.id}
-          playerName={playerName}
-          trackName={track.name}
-          onComplete={(grid) => { setQualifyingGrid(grid); setScreen("racing"); }}
-          onCancel={() => setScreen("track")}
-        />
       )}
 
       {screen === "editor" && (
