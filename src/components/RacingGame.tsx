@@ -1761,9 +1761,27 @@ export default function RacingGame() {
 
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-        const points = POINTS[position - 1] ?? 0;
+        // Pit-stop penalty: +5s per missed mandatory stop, applied to position
+        const missed = Math.max(0, requiredStops - pitStopsRef.current);
+        const PIT_PENALTY_S = 5;
+        const penaltyS = missed * PIT_PENALTY_S;
+        let adjustedPosition = position;
+        if (penaltyS > 0) {
+          // Re-score by subtracting penalty-equivalent progress from player
+          const penaltyProg = penaltyS / lapTimeEst;
+          const playerProgPenalised = raceProgress - penaltyProg;
+          let dropped = 0;
+          if (!isMulti) {
+            ais.forEach((ai) => {
+              const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+              if ((aiLapEst + ai.t) > playerProgPenalised && (aiLapEst + ai.t) <= raceProgress) dropped += 1;
+            });
+          }
+          adjustedPosition = Math.min(10, position + dropped);
+        }
+        const points = POINTS[adjustedPosition - 1] ?? 0;
         // Record daily-challenge progress for this race
-        const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000);
+        const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000) + penaltyS;
         try {
           recordRace({
             won: position === 1,
