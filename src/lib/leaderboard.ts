@@ -24,18 +24,20 @@ export async function fetchTopByLap(opts: { trackId?: string; sinceISO?: string;
     .order("best_lap", { ascending: true })
     .limit(opts.limit ?? 50);
   if (opts.trackId && opts.trackId !== "all") q = q.eq("track_id", opts.trackId);
-  else q = q.not("track_id", "like", "custom-%");
   if (opts.sinceISO) q = q.gte("created_at", opts.sinceISO);
   const { data, error } = await q;
   if (error) throw error;
-  return (data ?? []) as LBEntry[];
+  const rows = (data ?? []) as LBEntry[];
+  return (!opts.trackId || opts.trackId === "all")
+    ? rows.filter((r) => !r.track_id.startsWith("custom-"))
+    : rows;
 }
 
 export async function fetchTopByWins(opts: { sinceISO?: string; limit?: number }) {
   // Aggregate client-side from a recent slice (no SQL agg available client-side).
   let q = supabase
     .from("leaderboard_entries")
-    .select("player_name, won, race_time_sec, created_at")
+    .select("player_name, won, race_time_sec, created_at, track_id")
     .eq("won", true)
     .order("created_at", { ascending: false })
     .limit(2000);
@@ -43,7 +45,7 @@ export async function fetchTopByWins(opts: { sinceISO?: string; limit?: number }
   const { data, error } = await q;
   if (error) throw error;
   const by = new Map<string, { player_name: string; wins: number; bestRace: number }>();
-  for (const r of data ?? []) {
+  for (const r of (data ?? []).filter((r: any) => !String(r.track_id).startsWith("custom-"))) {
     const cur = by.get(r.player_name) ?? { player_name: r.player_name, wins: 0, bestRace: Infinity };
     cur.wins += 1;
     if (r.race_time_sec < cur.bestRace) cur.bestRace = r.race_time_sec;
