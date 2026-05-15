@@ -1091,9 +1091,13 @@ export default function RacingGame() {
       };
     }
     const isMulti = mode === "multi";
+    const qGrid = qualifyingGridRef.current;
     let playerSlot = 4;
     if (isMulti) {
       const idx = lobbyPlayers.findIndex((p) => p.id === playerIdRef.current);
+      playerSlot = idx >= 0 ? idx : 0;
+    } else if (qGrid && qGrid.length) {
+      const idx = qGrid.indexOf(driver.id);
       playerSlot = idx >= 0 ? idx : 0;
     }
     const pSlot = gridSlot(playerSlot);
@@ -1116,9 +1120,12 @@ export default function RacingGame() {
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
     const ais: (AI & { driver: Driver; offset: number })[] = [];
     if (!isMulti) {
-      const otherDrivers = DRIVERS.filter((d) => d.id !== driver.id);
+      // Order AI by qualifying grid (skip player); fall back to default order.
+      const ordered = qGrid && qGrid.length
+        ? qGrid.map((id) => DRIVERS.find((d) => d.id === id)).filter((d): d is Driver => !!d && d.id !== driver.id)
+        : DRIVERS.filter((d) => d.id !== driver.id);
       let next = 0;
-      otherDrivers.forEach((d) => {
+      ordered.forEach((d) => {
         if (next === playerSlot) next++;
         const slot = next++;
         const g = gridSlot(slot);
