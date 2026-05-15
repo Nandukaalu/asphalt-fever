@@ -407,6 +407,11 @@ export default function RacingGame() {
     try { localStorage.setItem("apex-name", playerName); } catch {}
   }, [playerName]);
 
+  // Sync username from authenticated profile
+  useEffect(() => {
+    if (profile?.username) setPlayerName(profile.display_name || profile.username);
+  }, [profile?.username, profile?.display_name]);
+
   useEffect(() => { setCareer(loadSave()); }, []);
 
   // Trigger cinematic intro when entering single-player race (not qualifying, not multi)
