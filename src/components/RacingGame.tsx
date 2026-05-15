@@ -1931,11 +1931,15 @@ export default function RacingGame() {
             </div>
           </div>
 
-          <div className="absolute top-4 left-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 border-l-2 border-red-600 pointer-events-none">
-            <div className="text-[10px] uppercase tracking-widest text-white/50">Lap</div>
-            <div className="text-xl font-bold">{hud.lap}/{hud.totalLaps}</div>
+          <div className={`absolute top-4 left-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 border-l-2 ${sessionMode === "qualifying" ? "border-fuchsia-500" : "border-red-600"} pointer-events-none`}>
+            <div className="text-[10px] uppercase tracking-widest text-white/50">
+              {sessionMode === "qualifying" ? "Session" : "Lap"}
+            </div>
+            <div className="text-xl font-bold">
+              {sessionMode === "qualifying" ? "QUALI" : `${hud.lap}/${hud.totalLaps}`}
+            </div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pos</div>
-            <div className="text-xl font-bold text-red-400">P{hud.position}</div>
+            <div className={`text-xl font-bold ${sessionMode === "qualifying" ? "text-fuchsia-300" : "text-red-400"}`}>P{hud.position}</div>
           </div>
 
           <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none hidden">
