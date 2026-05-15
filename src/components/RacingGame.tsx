@@ -2079,7 +2079,7 @@ export default function RacingGame() {
       )}
 
       {showDaily && <DailyHub onClose={() => setShowDaily(false)} />}
-      {showLeaderboard && <Leaderboard onClose={() => setShowLeaderboard(false)} tracks={allTracks.map((t) => ({ id: t.id, name: t.name }))} />}
+      {showLeaderboard && <Leaderboard onClose={() => setShowLeaderboard(false)} tracks={TRACKS.map((t) => ({ id: t.id, name: t.name }))} />}
       {showReplay && replayData && <ReplayViewer data={replayData} onClose={() => setShowReplay(false)} />}
       {showFriends && <FriendsPanel onClose={() => setShowFriends(false)} />}
 
