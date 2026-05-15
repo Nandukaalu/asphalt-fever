@@ -8,7 +8,6 @@ import Leaderboard from "./Leaderboard";
 import ReplayViewer, { type ReplayData, type ReplayFrame } from "./ReplayViewer";
 import { submitLeaderboard } from "@/lib/leaderboard";
 import LiveTiming, { type LiveEntry } from "./LiveTiming";
-import Qualifying from "./Qualifying";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -343,10 +342,13 @@ export default function RacingGame() {
   const [liveBoard, setLiveBoard] = useState<LiveEntry[]>([]);
   const [fastestLapTime, setFastestLapTime] = useState<number>(0);
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "qualifying" | "racing" | "result">("menu");
+  const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [qualifyingGrid, setQualifyingGrid] = useState<string[] | null>(null);
   const qualifyingGridRef = useRef<string[] | null>(null);
   useEffect(() => { qualifyingGridRef.current = qualifyingGrid; }, [qualifyingGrid]);
+  const [sessionMode, setSessionMode] = useState<"qualifying" | "race">("race");
+  const sessionModeRef = useRef<"qualifying" | "race">("race");
+  useEffect(() => { sessionModeRef.current = sessionMode; }, [sessionMode]);
   const [mode, setMode] = useState<Mode>("quick");
   const [customDrivers, setCustomDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string>(DRIVERS[0].id);
@@ -511,6 +513,8 @@ export default function RacingGame() {
   // ============ Three.js race loop ============
   useEffect(() => {
     if (screen !== "racing") return;
+    const sessionModeLocal = sessionModeRef.current;
+    const isQualifying = sessionModeLocal === "qualifying";
     const mount = mountRef.current!;
     const width = mount.clientWidth;
     const height = mount.clientHeight;
@@ -1183,7 +1187,7 @@ export default function RacingGame() {
     const carPos = new THREE.Vector3().copy(player.group.position);
     let steering = 0;
     let lap = 1;
-    const totalLaps = lapsChoice;
+    const totalLaps = isQualifying ? 1 : lapsChoice;
     let lapStart = performance.now();
     let bestLap = 0;
     let prevT = pSlot.t;
@@ -1648,18 +1652,29 @@ export default function RacingGame() {
             });
           });
         }
-        rows.sort((a, b) => b.progress - a.progress);
+        if (isQualifying) {
+          // Sort by best lap ascending (no lap = bottom)
+          rows.sort((a, b) => (a.bestLap ?? 9999) - (b.bestLap ?? 9999));
+        } else {
+          rows.sort((a, b) => b.progress - a.progress);
+        }
         const leaderProg = rows[0]?.progress ?? 0;
+        const poleLap = isQualifying ? rows[0]?.bestLap : undefined;
         // Fastest lap across the field
         let fl = 0;
         rows.forEach((r) => { if (r.bestLap && (fl === 0 || r.bestLap < fl)) fl = r.bestLap; });
         const entries: LiveEntry[] = rows.map((r, i) => {
-          const dProg = leaderProg - r.progress;
           let gap = "—";
-          if (i > 0) {
-            const lapsBehind = Math.floor(dProg);
-            if (lapsBehind >= 1) gap = `+${lapsBehind} LAP`;
-            else gap = `+${(dProg * lapTimeEst).toFixed(2)}`;
+          if (isQualifying) {
+            if (r.bestLap === undefined) gap = "NO TIME";
+            else if (i > 0 && poleLap) gap = `+${(r.bestLap - poleLap).toFixed(3)}`;
+          } else {
+            const dProg = leaderProg - r.progress;
+            if (i > 0) {
+              const lapsBehind = Math.floor(dProg);
+              if (lapsBehind >= 1) gap = `+${lapsBehind} LAP`;
+              else gap = `+${(dProg * lapTimeEst).toFixed(2)}`;
+            }
           }
           return {
             id: r.id, name: r.name, team: r.team, color: r.color, number: r.number,
@@ -1679,6 +1694,25 @@ export default function RacingGame() {
       }
 
       renderer.render(scene, camera);
+
+      if (isQualifying) {
+        // Qualifying ends when player has set a lap AND every AI has set a lap.
+        const playerDone = bestLap > 0;
+        const aisDone = isMulti ? true : ais.every((a) => a.bestLap > 0);
+        if (playerDone && aisDone) {
+          // Build starting grid: fastest lap first.
+          const standings: { id: string; t: number }[] = [
+            { id: driver.id, t: bestLap },
+            ...ais.map((a) => ({ id: a.driver.id, t: a.bestLap })),
+          ];
+          standings.sort((a, b) => a.t - b.t);
+          setQualifyingGrid(standings.map((s) => s.id));
+          setSessionMode("race"); // triggers effect re-run for the actual race
+          return;
+        }
+        raf = requestAnimationFrame(animate);
+        return;
+      }
 
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
@@ -1761,7 +1795,7 @@ export default function RacingGame() {
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen]);
+  }, [screen, sessionMode]);
 
   // ---------------- Render ----------------
   return (
@@ -1846,21 +1880,15 @@ export default function RacingGame() {
           onBack={() => setScreen("driver")}
           onStart={() => {
             if (mode === "multi") setScreen("lobby");
-            else { setResult(null); setQualifyingGrid(null); setScreen("qualifying"); }
+            else {
+              setResult(null);
+              setQualifyingGrid(null);
+              setSessionMode("qualifying");
+              setScreen("racing");
+            }
           }}
         />
         </>
-      )}
-
-      {screen === "qualifying" && (
-        <Qualifying
-          drivers={DRIVERS}
-          playerDriverId={driver.id}
-          playerName={playerName}
-          trackName={track.name}
-          onComplete={(grid) => { setQualifyingGrid(grid); setScreen("racing"); }}
-          onCancel={() => setScreen("track")}
-        />
       )}
 
       {screen === "editor" && (
@@ -1903,11 +1931,15 @@ export default function RacingGame() {
             </div>
           </div>
 
-          <div className="absolute top-4 left-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 border-l-2 border-red-600 pointer-events-none">
-            <div className="text-[10px] uppercase tracking-widest text-white/50">Lap</div>
-            <div className="text-xl font-bold">{hud.lap}/{hud.totalLaps}</div>
+          <div className={`absolute top-4 left-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 border-l-2 ${sessionMode === "qualifying" ? "border-fuchsia-500" : "border-red-600"} pointer-events-none`}>
+            <div className="text-[10px] uppercase tracking-widest text-white/50">
+              {sessionMode === "qualifying" ? "Session" : "Lap"}
+            </div>
+            <div className="text-xl font-bold">
+              {sessionMode === "qualifying" ? "QUALI" : `${hud.lap}/${hud.totalLaps}`}
+            </div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pos</div>
-            <div className="text-xl font-bold text-red-400">P{hud.position}</div>
+            <div className={`text-xl font-bold ${sessionMode === "qualifying" ? "text-fuchsia-300" : "text-red-400"}`}>P{hud.position}</div>
           </div>
 
           <div className="absolute top-4 right-4 text-white font-mono z-10 select-none bg-black/40 backdrop-blur px-3 py-1.5 text-right pointer-events-none hidden">
