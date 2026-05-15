@@ -1695,6 +1695,25 @@ export default function RacingGame() {
 
       renderer.render(scene, camera);
 
+      if (isQualifying) {
+        // Qualifying ends when player has set a lap AND every AI has set a lap.
+        const playerDone = bestLap > 0;
+        const aisDone = isMulti ? true : ais.every((a) => a.bestLap > 0);
+        if (playerDone && aisDone) {
+          // Build starting grid: fastest lap first.
+          const standings: { id: string; t: number }[] = [
+            { id: driver.id, t: bestLap },
+            ...ais.map((a) => ({ id: a.driver.id, t: a.bestLap })),
+          ];
+          standings.sort((a, b) => a.t - b.t);
+          setQualifyingGrid(standings.map((s) => s.id));
+          setSessionMode("race"); // triggers effect re-run for the actual race
+          return;
+        }
+        raf = requestAnimationFrame(animate);
+        return;
+      }
+
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         const points = POINTS[position - 1] ?? 0;
