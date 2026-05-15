@@ -1457,11 +1457,70 @@ export default function RacingGame() {
 
       // ---------- Pit stop in progress: hold car in box, run timer ----------
       if (inPit) {
-        speed *= Math.pow(0.001, dt); // hard brake to a stop
+        speed = 0;
         lateralVel = 0;
         const elapsed = now - pitBoxStart;
         const prog = Math.min(1, elapsed / PIT_DURATION_MS);
         setPitProgress(prog);
+        // Drive into pit box, get serviced, drive back out
+        pitCrewGroup.visible = prog > 0.12 && prog < 0.92;
+        if (prog < 0.18) {
+          // Phase 1: glide diagonally into the pit box
+          const k = Math.min(1, dt * 4);
+          carPos.x += (pitBoxPos.x - carPos.x) * k;
+          carPos.z += (pitBoxPos.z - carPos.z) * k;
+          // Rotate heading toward pit heading
+          let dh = pitBoxHeading - heading;
+          while (dh > Math.PI) dh -= Math.PI * 2;
+          while (dh < -Math.PI) dh += Math.PI * 2;
+          heading += dh * Math.min(1, dt * 5);
+          pitLiftY = 0;
+        } else if (prog < 0.85) {
+          // Phase 2: serviced — locked in box, jack lifts car, tires swap
+          carPos.x = pitBoxPos.x;
+          carPos.z = pitBoxPos.z;
+          heading = pitBoxHeading;
+          const lp = (prog - 0.18) / 0.67; // 0..1
+          let lift = 0;
+          if (lp < 0.18) lift = (lp / 0.18) * 0.32;
+          else if (lp > 0.82) lift = ((1 - lp) / 0.18) * 0.32;
+          else lift = 0.32;
+          pitLiftY = lift;
+          jack.position.y = 0.08 + lift * 0.6;
+          jack.scale.y = 1 + lift * 2.2;
+          // Tire swap window: hide old wheels, show fresh tires moving in
+          const swapping = lp > 0.35 && lp < 0.65;
+          freshTiresFlash = swapping;
+          player.wheels.forEach((w) => (w.visible = !swapping));
+          // Animate spare tires flying into wheel positions
+          const wp: [number, number][] = [[-0.75, 1.3], [0.75, 1.3], [-0.78, -1.3], [0.78, -1.3]];
+          spareTires.forEach((tt, i) => {
+            const target = wp[i];
+            const startX = target[0] * 2.2;
+            const t01 = swapping ? (lp - 0.35) / 0.3 : (lp < 0.35 ? 0 : 1);
+            tt.visible = lp > 0.3 && lp < 0.7;
+            tt.position.set(
+              startX + (target[0] - startX) * t01,
+              0.36 + lift,
+              target[1],
+            );
+          });
+          // Crew bobbing while working
+          crewMembers.forEach((c, i) => {
+            c.position.y = Math.abs(Math.sin(now * 0.012 + i)) * 0.08;
+          });
+        } else {
+          // Phase 3: jack down, drive out of pit lane back onto track
+          pitLiftY = 0;
+          jack.position.y = 0.08;
+          jack.scale.y = 1;
+          spareTires.forEach((tt) => (tt.visible = false));
+          player.wheels.forEach((w) => (w.visible = true));
+          const exit = curve.getPointAt(0.04);
+          const k = Math.min(1, dt * 4);
+          carPos.x += (exit.x - carPos.x) * k;
+          carPos.z += (exit.z - carPos.z) * k;
+        }
         if (elapsed >= PIT_DURATION_MS) {
           pitStopsRef.current += 1;
           setPitStops(pitStopsRef.current);
@@ -1470,7 +1529,11 @@ export default function RacingGame() {
           setPitProgress(0);
           setPitRequested(false);
           pitRequestedRef.current = false;
-          speed = 6; // released, gentle pit-lane exit speed
+          speed = 8;
+          pitLiftY = 0;
+          pitCrewGroup.visible = false;
+          spareTires.forEach((tt) => (tt.visible = false));
+          player.wheels.forEach((w) => (w.visible = true));
         }
       }
 
@@ -1533,7 +1596,7 @@ export default function RacingGame() {
         }
       }
 
-      player.group.position.set(carPos.x, 0, carPos.z);
+      player.group.position.set(carPos.x, pitLiftY, carPos.z);
       player.group.rotation.y = heading;
 
       const wheelSpin = (speed * dt) / 0.36;
