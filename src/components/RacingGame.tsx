@@ -342,6 +342,17 @@ export default function RacingGame() {
   const [liveBoard, setLiveBoard] = useState<LiveEntry[]>([]);
   const [fastestLapTime, setFastestLapTime] = useState<number>(0);
   const [countdown, setCountdown] = useState<number | null>(null);
+  // Pit stops
+  const [pitStops, setPitStops] = useState(0);
+  const [pitRequested, setPitRequested] = useState(false);
+  const [pitActive, setPitActive] = useState(false); // currently in pit box
+  const [pitProgress, setPitProgress] = useState(0); // 0..1
+  const pitRequestedRef = useRef(false);
+  const pitActiveRef = useRef(false);
+  const pitStopsRef = useRef(0);
+  useEffect(() => { pitRequestedRef.current = pitRequested; }, [pitRequested]);
+  useEffect(() => { pitActiveRef.current = pitActive; }, [pitActive]);
+  useEffect(() => { pitStopsRef.current = pitStops; }, [pitStops]);
   const [screen, setScreen] = useState<"menu" | "multi" | "driver" | "track" | "editor" | "lobby" | "racing" | "result">("menu");
   const [qualifyingGrid, setQualifyingGrid] = useState<string[] | null>(null);
   const qualifyingGridRef = useRef<string[] | null>(null);
