@@ -1247,9 +1247,11 @@ export default function RacingGame() {
     let last = performance.now();
     let raf = 0;
     let hudTick = 0;
-    const raceStartAt = last + 3800;
+    const introMs = introMsRef.current;
+    introMsRef.current = 0;
+    const raceStartAt = last + 3800 + introMs;
     let lastCountdownShown = 99;
-    setCountdown(3);
+    setCountdown(introMs > 0 ? null : 3);
 
     // Session stats for daily challenges
     let sessTopSpeedKmh = 0;
