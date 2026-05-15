@@ -85,14 +85,14 @@ export function FriendsPanel({ onClose }: { onClose: () => void }) {
       .in("player_name", usernames);
     const agg = new Map<string, { best: number; wins: number }>();
     (lb ?? []).forEach((row: any) => {
-      const cur = agg.get(row.player_name) ?? { best: Infinity, wins: 0 };
+      const cur = agg.get(row.player_name) || { best: Infinity, wins: 0 };
       cur.best = Math.min(cur.best, Number(row.best_lap));
       if (row.won) cur.wins += 1;
       agg.set(row.player_name, cur);
     });
     const list: Rank[] = allIds.map(uid => {
       const username = profMap.get(uid) ?? "—";
-      const a = agg.get(username) ?? { best: Infinity, wins: 0 };
+      const a = agg.get(username) || { best: Infinity, wins: 0 };
       return { user_id: uid, username, best_lap: a.best, wins: a.wins };
     }).sort((a, b) => a.best - b.best);
     setRanks(list);
