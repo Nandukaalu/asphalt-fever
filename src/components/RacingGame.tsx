@@ -382,6 +382,7 @@ export default function RacingGame() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [replayData, setReplayData] = useState<ReplayData | null>(null);
   const [showReplay, setShowReplay] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
   const lastReplayFramesRef = useRef<ReplayFrame[]>([]);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
