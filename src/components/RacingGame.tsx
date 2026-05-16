@@ -1205,24 +1205,32 @@ export default function RacingGame() {
       blending: THREE.NormalBlending,
     });
     const smokeGeo = new THREE.PlaneGeometry(0.9, 0.9);
-    type Puff = { mesh: THREE.Mesh; life: number; maxLife: number };
+    type Puff = { mesh: THREE.Mesh; life: number; maxLife: number; rise: number; baseOpacity: number };
     const smokes: Puff[] = [];
     for (let i = 0; i < SMOKE_COUNT; i++) {
       const m = new THREE.Mesh(smokeGeo, smokeMat.clone());
       m.rotation.x = -Math.PI / 2;
       m.visible = false;
       scene.add(m);
-      smokes.push({ mesh: m, life: 0, maxLife: 1 });
+      smokes.push({ mesh: m, life: 0, maxLife: 1, rise: 0, baseOpacity: 0.75 });
     }
     let smokeIdx = 0;
-    function spawnSmoke(x: number, z: number) {
+    function spawnSmoke(
+      x: number,
+      z: number,
+      opts?: { color?: number; life?: number; scale?: number; opacity?: number; rise?: number; y?: number },
+    ) {
       const p = smokes[smokeIdx++ % SMOKE_COUNT];
-      p.mesh.position.set(x, 0.05, z);
-      p.mesh.scale.setScalar(0.6 + Math.random() * 0.4);
-      p.life = 0.8 + Math.random() * 0.4;
+      const mat = p.mesh.material as THREE.MeshBasicMaterial;
+      mat.color.setHex(opts?.color ?? 0xeeeeee);
+      p.mesh.position.set(x, opts?.y ?? 0.05, z);
+      p.mesh.scale.setScalar((opts?.scale ?? 1) * (0.6 + Math.random() * 0.4));
+      p.life = opts?.life ?? (0.8 + Math.random() * 0.4);
       p.maxLife = p.life;
+      p.rise = opts?.rise ?? 0;
+      p.baseOpacity = opts?.opacity ?? 0.75;
       p.mesh.visible = true;
-      (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75;
+      mat.opacity = p.baseOpacity;
     }
 
     // Wet road darkening overlay (simple ambient tint via fog already; bump exposure dn if wet)
@@ -1346,6 +1354,13 @@ export default function RacingGame() {
     let firstCross = false;
     let raceFinished = false;
     let raceProgress = 0; // total fraction
+
+    // Advanced physics: tire temp/wear, body weight transfer, camera trauma
+    let tireTemp = 0.3;       // 0..1 (cold..overheated). Sweet spot ~0.55
+    let tireWear = 0;         // 0..1 (fresh..bald)
+    let bodyPitch = 0;        // visual pitch (accel/brake)
+    let bodyRoll = 0;         // visual roll (cornering)
+    let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
 
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
@@ -1543,11 +1558,36 @@ export default function RacingGame() {
       const steerInput = keySteer !== 0 ? keySteer : -t.steer;
       steering += (steerInput - steering) * Math.min(1, dt * 6);
 
-      if (accel) speed += ACCEL * dt;
-      if (brake) speed -= BRAKE * dt;
+      // ---------- Weather-aware grip model ----------
+      const wetness = W.wet ? Math.min(1.4, W.rain) : 0;
+      // Reset on pit (fresh tires)
+      if (inPit) { tireTemp = 0.3; tireWear = Math.max(0, tireWear - dt * 0.4); }
+      // Grip: dry=1, heavy rain ~0.55, also degrades with wear, peaks at warm temp
+      const tempCurve = 1 - Math.abs(tireTemp - 0.55) * 0.6; // 0.67..1
+      const gripBase = (1 - wetness * 0.32) * (1 - tireWear * 0.25) * tempCurve;
+      const grip = Math.max(0.35, gripBase);
+
+      // Hydroplaning: heavy rain + high speed = loss of grip + wobble
+      const speedFrac = Math.abs(speed) / MAX_SPEED;
+      const hydro = wetness > 0.6 && speedFrac > 0.78
+        ? Math.min(1, (speedFrac - 0.78) * 4 * (wetness - 0.5))
+        : 0;
+
+      // Effective accel/brake scale with grip (wet = less traction, longer braking)
+      const accelMul = 0.55 + 0.45 * grip;
+      const brakeMul = 0.5 + 0.5 * grip;
+      if (accel) speed += ACCEL * dt * accelMul * (1 - hydro * 0.5);
+      if (brake) speed -= BRAKE * dt * brakeMul * (1 - hydro * 0.4);
       if (!accel && !brake) speed -= Math.sign(speed) * Math.min(Math.abs(speed), DRAG * dt * 6);
-      if (handbrake) speed *= Math.pow(0.05, dt);
+      if (handbrake) speed *= Math.pow(0.05 + (1 - grip) * 0.1, dt);
       speed = Math.max(-15, Math.min(MAX_SPEED, speed));
+
+      // Tire heat from cornering / braking / handbrake; cool while cruising
+      const work = Math.abs(steering) * speedFrac + (brake ? 0.7 : 0) + (handbrake ? 1.4 : 0);
+      tireTemp += (work * 0.35 - 0.15) * dt;
+      tireTemp = Math.max(0, Math.min(1, tireTemp));
+      // Wear accumulates with work, slower
+      tireWear = Math.min(1, tireWear + work * dt * 0.0035);
 
       const ct = closestT(carPos);
       if (!inPit && ct.dist > TRACK_WIDTH / 2 + 1.5) {
@@ -1556,14 +1596,17 @@ export default function RacingGame() {
 
       // Heading + lateral slide physics
       const speedFactor = Math.min(1, Math.abs(speed) / 12);
-      const turnRate = STEER_RATE * speedFactor * (speed >= 0 ? 1 : -1);
-      const dHeading = steering * turnRate * dt;
+      const turnRate = STEER_RATE * speedFactor * (speed >= 0 ? 1 : -1) * (0.7 + 0.3 * grip);
+      // Hydroplaning wobble: tiny random heading drift, low steering authority
+      const hydroWobble = hydro * (Math.random() - 0.5) * 0.8 * dt;
+      const dHeading = steering * turnRate * dt * (1 - hydro * 0.6) + hydroWobble;
       heading += dHeading;
 
       // Slide: lateral vel from sharp turning at high speed
-      const lateralAccel = -dHeading * speed * 0.6;
+      const lateralAccel = -dHeading * speed * (0.6 + (1 - grip) * 0.5);
       lateralVel += lateralAccel;
-      lateralVel *= Math.pow(0.04, dt); // grip recovery
+      // Lower grip => slide persists longer
+      lateralVel *= Math.pow(0.04 + (1 - grip) * 0.35, dt);
 
       // Move forward + sideways
       const fx = Math.sin(heading), fz = Math.cos(heading);
@@ -1581,8 +1624,16 @@ export default function RacingGame() {
         const nx = dx / len, nz = dz / len;
         carPos.x = center.x + nx * WALL_LIMIT;
         carPos.z = center.z + nz * WALL_LIMIT;
-        speed *= 0.9;     // gentle scrape, not a full stop
-        lateralVel *= -0.2;
+        const impact = Math.min(1, Math.abs(speed) / MAX_SPEED);
+        speed *= 0.88 - impact * 0.05;
+        lateralVel *= -0.25;
+        camTrauma = Math.min(1, camTrauma + 0.25 + impact * 0.5);
+        // Sparks while scraping
+        for (let s = 0; s < 4; s++) {
+          spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
+            color: 0xffb648, life: 0.25 + Math.random() * 0.2, scale: 0.35, opacity: 0.9, y: 0.3,
+          });
+        }
       }
 
       // Cone collisions (hitboxes)
@@ -1599,7 +1650,12 @@ export default function RacingGame() {
       }
 
       player.group.position.set(carPos.x, pitLiftY, carPos.z);
-      player.group.rotation.y = heading;
+      // Weight transfer: pitch from accel/brake, roll from cornering
+      const pitchTarget = ((brake ? 1 : 0) - (accel ? 1 : 0)) * 0.05 * (0.4 + speedFrac * 0.6);
+      const rollTarget = -steering * 0.07 * (0.3 + speedFrac * 0.7);
+      bodyPitch += (pitchTarget - bodyPitch) * Math.min(1, dt * 6);
+      bodyRoll += (rollTarget - bodyRoll) * Math.min(1, dt * 6);
+      player.group.rotation.set(bodyPitch, heading, bodyRoll);
 
       const wheelSpin = (speed * dt) / 0.36;
       player.wheels.forEach((w) => (w.rotation.x += wheelSpin));
@@ -1771,9 +1827,12 @@ export default function RacingGame() {
         const off = new THREE.Vector3(0, 1.05, -0.4).applyEuler(new THREE.Euler(0, heading, 0));
         camWorld = player.group.position.clone().add(off);
       }
-      const shake = (Math.abs(speed) / MAX_SPEED) * 0.05;
+      // Camera shake: base from speed, amplified by trauma (impacts) + hydroplaning rumble
+      camTrauma = Math.max(0, camTrauma - dt * 1.6);
+      const shake = (Math.abs(speed) / MAX_SPEED) * 0.06 + camTrauma * 0.35 + hydro * 0.12;
       camWorld.x += (Math.random() - 0.5) * shake;
-      camWorld.y += (Math.random() - 0.5) * shake;
+      camWorld.y += (Math.random() - 0.5) * shake * 0.7;
+      camWorld.z += (Math.random() - 0.5) * shake * 0.4;
       camera.position.lerp(camWorld, camMode === "chase" ? 0.15 : 0.5);
       const lookTarget = new THREE.Vector3(
         player.group.position.x + Math.sin(heading) * 12,
@@ -1834,14 +1893,29 @@ export default function RacingGame() {
         // Track drift distance in meters (m/s * dt) — physics speed is roughly m/s scale
         sessDriftDist += Math.abs(speed) * dt;
       }
+      // Water spray on wet track at speed (and extra during hydroplaning)
+      if (wetness > 0.15 && Math.abs(speed) > 14) {
+        const back = new THREE.Vector3(0, 0, -1.1).applyEuler(new THREE.Euler(0, heading, 0));
+        const sideR = new THREE.Vector3(0.8, 0, 0).applyEuler(new THREE.Euler(0, heading, 0));
+        const sprayCount = hydro > 0 ? 3 : 1;
+        for (let s = 0; s < sprayCount; s++) {
+          spawnSmoke(carPos.x + back.x + sideR.x, carPos.z + back.z + sideR.z, {
+            color: 0xbcd0e0, life: 0.45, scale: 0.7, opacity: 0.55, rise: 1.8, y: 0.2,
+          });
+          spawnSmoke(carPos.x + back.x - sideR.x, carPos.z + back.z - sideR.z, {
+            color: 0xbcd0e0, life: 0.45, scale: 0.7, opacity: 0.55, rise: 1.8, y: 0.2,
+          });
+        }
+      }
       for (const p of smokes) {
         if (!p.mesh.visible) continue;
         p.life -= dt;
         if (p.life <= 0) { p.mesh.visible = false; continue; }
         const k = p.life / p.maxLife;
-        (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75 * k;
+        (p.mesh.material as THREE.MeshBasicMaterial).opacity = p.baseOpacity * k;
         p.mesh.scale.x += dt * 1.2;
         p.mesh.scale.y += dt * 1.2;
+        if (p.rise) p.mesh.position.y += p.rise * dt * k;
       }
 
       // HUD

@@ -233,6 +233,44 @@
 .animate-pulse-glow { animation: pulse-glow 2.4s ease-in-out infinite; }
 .animate-streak { animation: streak 3s linear infinite; }
 .animate-slide-up { animation: slide-up 0.8s ease-out both; }
+
+/* ---- Garage ambience ---- */
+@keyframes mechanic-walk {
+  0%   { transform: translateX(-10%); }
+  50%  { transform: translateX(110%); }
+  50.01% { transform: translateX(110%) scaleX(-1); }
+  100% { transform: translateX(-10%) scaleX(-1); }
+}
+@keyframes mechanic-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes wrench-spin {
+  0%, 100% { transform: rotate(-15deg); }
+  50% { transform: rotate(35deg); }
+}
+@keyframes spotlight-sweep {
+  0%   { transform: translateX(-30%) rotate(-8deg); opacity: 0.0; }
+  20%  { opacity: 0.35; }
+  80%  { opacity: 0.35; }
+  100% { transform: translateX(130%) rotate(8deg); opacity: 0.0; }
+}
+@keyframes monitor-flicker {
+  0%, 100% { opacity: 0.85; }
+  47% { opacity: 0.85; }
+  48% { opacity: 0.55; }
+  49% { opacity: 0.9; }
+}
+@keyframes garage-door {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-100%); }
+}
+.animate-mechanic-walk { animation: mechanic-walk 18s linear infinite; }
+.animate-mechanic-bob { animation: mechanic-bob 0.5s ease-in-out infinite; }
+.animate-wrench-spin { animation: wrench-spin 0.8s ease-in-out infinite; }
+.animate-spotlight-sweep { animation: spotlight-sweep 9s ease-in-out infinite; }
+.animate-monitor-flicker { animation: monitor-flicker 4s ease-in-out infinite; }
+.animate-garage-door { animation: garage-door 1.6s ease-out forwards; }
 .shimmer-text {
   background: linear-gradient(90deg, #fff 0%, #ff6a1a 25%, #22d3ee 50%, #ff6a1a 75%, #fff 100%);
   background-size: 200% auto;
