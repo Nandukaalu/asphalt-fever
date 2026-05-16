@@ -1650,7 +1650,12 @@ export default function RacingGame() {
       }
 
       player.group.position.set(carPos.x, pitLiftY, carPos.z);
-      player.group.rotation.y = heading;
+      // Weight transfer: pitch from accel/brake, roll from cornering
+      const pitchTarget = ((brake ? 1 : 0) - (accel ? 1 : 0)) * 0.05 * (0.4 + speedFrac * 0.6);
+      const rollTarget = -steering * 0.07 * (0.3 + speedFrac * 0.7);
+      bodyPitch += (pitchTarget - bodyPitch) * Math.min(1, dt * 6);
+      bodyRoll += (rollTarget - bodyRoll) * Math.min(1, dt * 6);
+      player.group.rotation.set(bodyPitch, heading, bodyRoll);
 
       const wheelSpin = (speed * dt) / 0.36;
       player.wheels.forEach((w) => (w.rotation.x += wheelSpin));
@@ -1822,9 +1827,12 @@ export default function RacingGame() {
         const off = new THREE.Vector3(0, 1.05, -0.4).applyEuler(new THREE.Euler(0, heading, 0));
         camWorld = player.group.position.clone().add(off);
       }
-      const shake = (Math.abs(speed) / MAX_SPEED) * 0.05;
+      // Camera shake: base from speed, amplified by trauma (impacts) + hydroplaning rumble
+      camTrauma = Math.max(0, camTrauma - dt * 1.6);
+      const shake = (Math.abs(speed) / MAX_SPEED) * 0.06 + camTrauma * 0.35 + hydro * 0.12;
       camWorld.x += (Math.random() - 0.5) * shake;
-      camWorld.y += (Math.random() - 0.5) * shake;
+      camWorld.y += (Math.random() - 0.5) * shake * 0.7;
+      camWorld.z += (Math.random() - 0.5) * shake * 0.4;
       camera.position.lerp(camWorld, camMode === "chase" ? 0.15 : 0.5);
       const lookTarget = new THREE.Vector3(
         player.group.position.x + Math.sin(heading) * 12,
