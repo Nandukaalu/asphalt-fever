@@ -379,6 +379,9 @@ export default function RacingGame() {
   useEffect(() => { try { localStorage.setItem(WEATHER_KEY, weatherId); } catch {} }, [weatherId]);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
+  const [classification, setClassification] = useState<PodiumEntry[]>([]);
+  const [fastestLapId, setFastestLapId] = useState<string | undefined>(undefined);
+  const [showPodium, setShowPodium] = useState(false);
   const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
   const [showDaily, setShowDaily] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
