@@ -13,6 +13,7 @@ import { FriendsPanel } from "./Friends";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "@tanstack/react-router";
 import { Users } from "lucide-react";
+import PodiumCeremony, { type PodiumEntry } from "./PodiumCeremony";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -378,6 +379,9 @@ export default function RacingGame() {
   useEffect(() => { try { localStorage.setItem(WEATHER_KEY, weatherId); } catch {} }, [weatherId]);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
+  const [classification, setClassification] = useState<PodiumEntry[]>([]);
+  const [fastestLapId, setFastestLapId] = useState<string | undefined>(undefined);
+  const [showPodium, setShowPodium] = useState(false);
   const [customTracks, setCustomTracks] = useState<TrackDef[]>([]);
   const [showDaily, setShowDaily] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -2023,6 +2027,43 @@ export default function RacingGame() {
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
         setResult({ position: adjustedPosition, bestLap, points });
+        // Build full classification (positions, names, points, best laps) and detect fastest lap
+        {
+          const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
+          const lapsByDriver = new Map<string, number>();
+          lapsByDriver.set(driver.id, bestLap);
+          if (isMulti) {
+            remotesRef.current.forEach((rp, id) => {
+              const rl = remoteLap.get(id);
+              if (rl && rl.bestLap > 0) lapsByDriver.set(rp.driverId, rl.bestLap);
+            });
+          } else {
+            ais.forEach((ai) => { if (ai.bestLap > 0) lapsByDriver.set(ai.driver.id, ai.bestLap); });
+          }
+          let flId: string | undefined;
+          let flTime = Infinity;
+          lapsByDriver.forEach((t, id) => { if (t > 0 && t < flTime) { flTime = t; flId = id; } });
+          setFastestLapId(flId);
+          const nameForRemote = new Map<string, string>();
+          if (isMulti) remotesRef.current.forEach((rp) => nameForRemote.set(rp.driverId, rp.name || ""));
+          const POINTS_TABLE = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+          const cls: PodiumEntry[] = order.map((id, i) => {
+            const drv = DRIVERS.find((d) => d.id === id) ?? DRIVERS[0];
+            const isP = id === driver.id;
+            const remoteName = nameForRemote.get(id);
+            return {
+              id,
+              name: isP ? (playerName || drv.name) : (remoteName || drv.name),
+              team: drv.team,
+              color: toHex2(drv.primary),
+              number: drv.number,
+              bestLap: lapsByDriver.get(id),
+              points: POINTS_TABLE[i] ?? 0,
+              isPlayer: isP,
+            };
+          });
+          setClassification(cls);
+        }
         if (mode === "career") {
           const cur: CareerSave = loadSave() ?? {
             driverId: driver.id, points: 0, completed: {}, standings: {}, rounds: [],
@@ -2376,6 +2417,9 @@ export default function RacingGame() {
           track={track}
           mode={mode}
           career={career}
+          classification={classification}
+          fastestLapId={fastestLapId}
+          onPodium={() => setShowPodium(true)}
           onMenu={() => setScreen("menu")}
           onAgain={() => { setResult(null); setScreen("racing"); }}
           canReplay={lastReplayFramesRef.current.length > 1}
@@ -2389,6 +2433,15 @@ export default function RacingGame() {
             });
             setShowReplay(true);
           }}
+        />
+      )}
+
+      {showPodium && classification.length > 0 && (
+        <PodiumCeremony
+          entries={classification}
+          trackName={track.name}
+          fastestLapId={fastestLapId}
+          onClose={() => setShowPodium(false)}
         />
       )}
     </div>
@@ -2893,31 +2946,70 @@ function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTrack
   );
 }
 
-function ResultScreen({ result, driver, track, mode, career, onMenu, onAgain, onReplay, canReplay }: {
+function ResultScreen({ result, driver, track, mode, career, classification, fastestLapId, onPodium, onMenu, onAgain, onReplay, canReplay }: {
   result: { position: number; bestLap: number; points: number };
   driver: Driver;
   track: TrackDef;
   mode: Mode;
   career: CareerSave | null;
+  classification: PodiumEntry[];
+  fastestLapId?: string;
+  onPodium: () => void;
   onMenu: () => void;
   onAgain: () => void;
   onReplay: () => void;
   canReplay: boolean;
 }) {
+  const hasPodium = classification.length > 0;
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/85 to-black/95 text-white z-30 px-6">
-      <div className="text-white/50 uppercase tracking-widest text-xs mb-2">{track.name} • {driver.team}</div>
-      <div className="text-7xl sm:text-9xl font-black text-red-500 leading-none">P{result.position}</div>
-      <div className="mt-4 font-mono text-center">
-        <div className="text-sm text-white/60 uppercase tracking-widest">Best Lap</div>
-        <div className="text-2xl font-bold">{result.bestLap > 0 ? result.bestLap.toFixed(2) : "--.--"}s</div>
-        <div className="text-sm text-white/60 uppercase tracking-widest mt-3">Points</div>
-        <div className="text-2xl font-bold text-red-400">+{result.points}</div>
+    <div className="absolute inset-0 flex flex-col items-center justify-start bg-gradient-to-b from-black/90 to-black/95 text-white z-30 px-4 py-6 overflow-y-auto">
+      <div className="text-white/50 uppercase tracking-widest text-xs mb-1">{track.name} • Final Classification</div>
+      <div className="text-5xl sm:text-7xl font-black text-red-500 leading-none">P{result.position}</div>
+      <div className="mt-2 mb-3 font-mono text-center flex gap-6">
+        <div>
+          <div className="text-[10px] text-white/60 uppercase tracking-widest">Best Lap</div>
+          <div className="text-lg font-bold">{result.bestLap > 0 ? result.bestLap.toFixed(2) : "--.--"}s</div>
+        </div>
+        <div>
+          <div className="text-[10px] text-white/60 uppercase tracking-widest">Points</div>
+          <div className="text-lg font-bold text-red-400">+{result.points}</div>
+        </div>
         {mode === "career" && career && (
-          <div className="text-xs text-white/50 mt-2">Career total: {career.points} pts</div>
+          <div>
+            <div className="text-[10px] text-white/60 uppercase tracking-widest">Career</div>
+            <div className="text-lg font-bold">{career.points}</div>
+          </div>
         )}
       </div>
-      <div className="flex gap-3 mt-8">
+
+      {hasPodium && (
+        <div className="w-full max-w-md border border-white/10 bg-black/40">
+          <div className="px-2 py-1 bg-white/5 text-[10px] text-white/60 uppercase tracking-widest grid grid-cols-[28px_1fr_70px_50px] gap-2">
+            <span>#</span><span>Driver</span><span className="text-right">Best</span><span className="text-right">Pts</span>
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {classification.map((e, i) => (
+              <div key={e.id} className={`grid grid-cols-[28px_1fr_70px_50px] gap-2 items-center px-2 py-1 border-t border-white/5 text-xs ${e.isPlayer ? "bg-red-600/20" : ""}`}>
+                <span className="text-white/60 tabular-nums">{i + 1}</span>
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="inline-block w-2 h-3" style={{ background: e.color }} />
+                  <span className="truncate font-semibold">{e.name}</span>
+                  {e.id === fastestLapId && <span className="text-[9px] px-1 bg-fuchsia-600/40 text-fuchsia-100 border border-fuchsia-400/40">FL</span>}
+                </span>
+                <span className="text-right tabular-nums text-white/80">{e.bestLap && e.bestLap > 0 ? `${e.bestLap.toFixed(2)}s` : "—"}</span>
+                <span className="text-right tabular-nums text-red-300 font-bold">+{e.points}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 justify-center mt-5">
+        {hasPodium && (
+          <button onClick={onPodium} className="px-5 py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black tracking-widest uppercase">
+            🏆 View Podium
+          </button>
+        )}
         <button onClick={onAgain} className="px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold tracking-widest uppercase">
           Race Again
         </button>
@@ -2931,7 +3023,7 @@ function ResultScreen({ result, driver, track, mode, career, onMenu, onAgain, on
         </button>
       </div>
       {mode === "career" && career && (
-        <div className="mt-6 w-full max-w-sm">
+        <div className="mt-4 w-full max-w-md">
           <StandingsTable career={career} />
         </div>
       )}
