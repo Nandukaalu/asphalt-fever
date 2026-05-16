@@ -1355,6 +1355,13 @@ export default function RacingGame() {
     let raceFinished = false;
     let raceProgress = 0; // total fraction
 
+    // Advanced physics: tire temp/wear, body weight transfer, camera trauma
+    let tireTemp = 0.3;       // 0..1 (cold..overheated). Sweet spot ~0.55
+    let tireWear = 0;         // 0..1 (fresh..bald)
+    let bodyPitch = 0;        // visual pitch (accel/brake)
+    let bodyRoll = 0;         // visual roll (cornering)
+    let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
+
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
     setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0);
