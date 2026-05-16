@@ -618,6 +618,22 @@ function GarageBackdrop() {
       <div className="absolute inset-x-0 top-0 h-[60%]" style={{
         background: "repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 110px)",
       }} />
+
+      {/* Sweeping ceiling spotlight */}
+      <div className="absolute -top-10 left-0 right-0 h-[70%] animate-spotlight-sweep"
+        style={{
+          background: "radial-gradient(ellipse 28% 80% at 50% 0%, rgba(255,236,200,0.18), transparent 60%)",
+          filter: "blur(6px)",
+        }} />
+
+      {/* Garage door (top) — slides up on mount */}
+      <div className="absolute top-0 left-[8%] right-[8%] h-[18%] origin-top animate-garage-door"
+        style={{
+          background: "repeating-linear-gradient(0deg, #1a1a1f 0 8px, #0f0f12 8px 14px)",
+          borderBottom: "2px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
+        }} />
+
       {/* Tool cabinets */}
       <div className="absolute left-4 bottom-[35%] w-24 h-32 rounded-md bg-zinc-900/80 border border-zinc-700 flex flex-col">
         <div className="flex-1 border-b border-zinc-700/60" />
@@ -635,6 +651,88 @@ function GarageBackdrop() {
       <div className="absolute right-44 bottom-[34%] flex flex-col items-center">
         {[0,1,2].map(i => <div key={i} className="w-16 h-3 rounded-full bg-black border border-zinc-700 -mt-0.5" />)}
       </div>
+
+      {/* Race monitors — live-ish telemetry */}
+      <div className="absolute left-[6%] top-[14%] w-40 h-24 rounded-md border border-cyan-400/30 bg-black/70 p-2 animate-monitor-flicker"
+        style={{ boxShadow: "0 0 18px rgba(34,211,238,0.18) inset" }}>
+        <div className="text-[8px] font-display tracking-widest text-cyan-300/80">TELEMETRY</div>
+        <div className="mt-1 grid grid-cols-2 gap-1 text-[8px] text-cyan-200/70 font-mono">
+          <div>LAP <span className="text-cyan-300">1:23.4</span></div>
+          <div>BEST <span className="text-cyan-300">1:22.9</span></div>
+          <div>TYRE <span className="text-amber-300">82°C</span></div>
+          <div>FUEL <span className="text-cyan-300">68%</span></div>
+        </div>
+        <div className="absolute bottom-1 left-2 right-2 h-1 rounded-full bg-cyan-400/20 overflow-hidden">
+          <div className="h-full w-2/3 bg-cyan-400/70" />
+        </div>
+      </div>
+      <div className="absolute right-[6%] top-[14%] w-40 h-24 rounded-md border border-orange-400/30 bg-black/70 p-2 animate-monitor-flicker"
+        style={{ boxShadow: "0 0 18px rgba(255,106,26,0.18) inset", animationDelay: "1.4s" }}>
+        <div className="text-[8px] font-display tracking-widest text-orange-300/80">STRATEGY</div>
+        <div className="mt-1 text-[8px] text-orange-200/80 font-mono leading-tight">
+          <div>STINT 1 — MEDIUMS</div>
+          <div>PIT WINDOW L14-L18</div>
+          <div>GAP AHEAD +1.234s</div>
+          <div>WEATHER DRY → RAIN</div>
+        </div>
+      </div>
+
+      {/* Trophy shelf */}
+      <div className="absolute left-1/2 -translate-x-1/2 top-[8%] flex gap-3 items-end">
+        {["#ffd44a", "#cfd2d6", "#c08b57"].map((c, i) => (
+          <div key={i} className="flex flex-col items-center" style={{ opacity: 0.85 }}>
+            <div className="w-3 h-4 rounded-t-full" style={{ background: c, boxShadow: `0 0 10px ${c}` }} />
+            <div className="w-5 h-1.5 -mt-0.5" style={{ background: c }} />
+            <div className="w-4 h-1 bg-zinc-800 mt-0.5" />
+          </div>
+        ))}
+      </div>
+
+      {/* Team banner */}
+      <div className="absolute left-1/2 -translate-x-1/2 top-[22%] w-44 h-6 flex items-center justify-center rounded-sm"
+        style={{
+          background: "linear-gradient(90deg, rgba(255,106,26,0.85), rgba(34,211,238,0.85))",
+          boxShadow: "0 0 18px rgba(255,106,26,0.35)",
+        }}>
+        <span className="text-[10px] font-display tracking-[0.4em] text-black/80">APEX RACING</span>
+      </div>
+
+      {/* Mechanic 1 — working on car (wrench animation) */}
+      <div className="absolute left-[28%] bottom-[18%] flex flex-col items-center animate-mechanic-bob">
+        <div className="w-3 h-3 rounded-full bg-amber-200" />
+        <div className="w-5 h-7 -mt-0.5 rounded-sm" style={{ background: "linear-gradient(180deg,#ea580c,#c2410c)" }} />
+        <div className="flex gap-0.5">
+          <div className="w-1.5 h-4 bg-zinc-700" />
+          <div className="w-1.5 h-4 bg-zinc-700" />
+        </div>
+        <div className="absolute -right-3 top-3 w-3 h-0.5 bg-zinc-400 origin-left animate-wrench-spin" />
+      </div>
+
+      {/* Mechanic 2 — inspecting engine */}
+      <div className="absolute right-[30%] bottom-[18%] flex flex-col items-center animate-mechanic-bob"
+        style={{ animationDelay: "0.2s" }}>
+        <div className="w-3 h-3 rounded-full bg-amber-100" />
+        <div className="w-5 h-7 -mt-0.5 rounded-sm" style={{ background: "linear-gradient(180deg,#0e7490,#155e75)" }} />
+        <div className="flex gap-0.5">
+          <div className="w-1.5 h-4 bg-zinc-700" />
+          <div className="w-1.5 h-4 bg-zinc-700" />
+        </div>
+      </div>
+
+      {/* Mechanic 3 — walking across garage */}
+      <div className="absolute left-0 right-0 bottom-[12%] pointer-events-none">
+        <div className="w-6 animate-mechanic-walk" style={{ willChange: "transform" }}>
+          <div className="flex flex-col items-center animate-mechanic-bob">
+            <div className="w-3 h-3 rounded-full bg-amber-200" />
+            <div className="w-5 h-7 -mt-0.5 rounded-sm" style={{ background: "linear-gradient(180deg,#a855f7,#7e22ce)" }} />
+            <div className="flex gap-0.5">
+              <div className="w-1.5 h-4 bg-zinc-700" />
+              <div className="w-1.5 h-4 bg-zinc-700" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Neon sign */}
       <div className="absolute left-1/2 -translate-x-1/2 top-6 font-display tracking-[0.5em] text-xs"
         style={{ color: "oklch(0.78 0.18 200)", textShadow: "0 0 12px oklch(0.78 0.18 200), 0 0 28px oklch(0.78 0.18 200 / 0.6)" }}>
