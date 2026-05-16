@@ -2417,6 +2417,9 @@ export default function RacingGame() {
           track={track}
           mode={mode}
           career={career}
+          classification={classification}
+          fastestLapId={fastestLapId}
+          onPodium={() => setShowPodium(true)}
           onMenu={() => setScreen("menu")}
           onAgain={() => { setResult(null); setScreen("racing"); }}
           canReplay={lastReplayFramesRef.current.length > 1}
@@ -2430,6 +2433,15 @@ export default function RacingGame() {
             });
             setShowReplay(true);
           }}
+        />
+      )}
+
+      {showPodium && classification.length > 0 && (
+        <PodiumCeremony
+          entries={classification}
+          trackName={track.name}
+          fastestLapId={fastestLapId}
+          onClose={() => setShowPodium(false)}
         />
       )}
     </div>
