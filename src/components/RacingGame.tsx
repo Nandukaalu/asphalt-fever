@@ -1558,11 +1558,36 @@ export default function RacingGame() {
       const steerInput = keySteer !== 0 ? keySteer : -t.steer;
       steering += (steerInput - steering) * Math.min(1, dt * 6);
 
-      if (accel) speed += ACCEL * dt;
-      if (brake) speed -= BRAKE * dt;
+      // ---------- Weather-aware grip model ----------
+      const wetness = W.wet ? Math.min(1.4, W.rain) : 0;
+      // Reset on pit (fresh tires)
+      if (inPit) { tireTemp = 0.3; tireWear = Math.max(0, tireWear - dt * 0.4); }
+      // Grip: dry=1, heavy rain ~0.55, also degrades with wear, peaks at warm temp
+      const tempCurve = 1 - Math.abs(tireTemp - 0.55) * 0.6; // 0.67..1
+      const gripBase = (1 - wetness * 0.32) * (1 - tireWear * 0.25) * tempCurve;
+      const grip = Math.max(0.35, gripBase);
+
+      // Hydroplaning: heavy rain + high speed = loss of grip + wobble
+      const speedFrac = Math.abs(speed) / MAX_SPEED;
+      const hydro = wetness > 0.6 && speedFrac > 0.78
+        ? Math.min(1, (speedFrac - 0.78) * 4 * (wetness - 0.5))
+        : 0;
+
+      // Effective accel/brake scale with grip (wet = less traction, longer braking)
+      const accelMul = 0.55 + 0.45 * grip;
+      const brakeMul = 0.5 + 0.5 * grip;
+      if (accel) speed += ACCEL * dt * accelMul * (1 - hydro * 0.5);
+      if (brake) speed -= BRAKE * dt * brakeMul * (1 - hydro * 0.4);
       if (!accel && !brake) speed -= Math.sign(speed) * Math.min(Math.abs(speed), DRAG * dt * 6);
-      if (handbrake) speed *= Math.pow(0.05, dt);
+      if (handbrake) speed *= Math.pow(0.05 + (1 - grip) * 0.1, dt);
       speed = Math.max(-15, Math.min(MAX_SPEED, speed));
+
+      // Tire heat from cornering / braking / handbrake; cool while cruising
+      const work = Math.abs(steering) * speedFrac + (brake ? 0.7 : 0) + (handbrake ? 1.4 : 0);
+      tireTemp += (work * 0.35 - 0.15) * dt;
+      tireTemp = Math.max(0, Math.min(1, tireTemp));
+      // Wear accumulates with work, slower
+      tireWear = Math.min(1, tireWear + work * dt * 0.0035);
 
       const ct = closestT(carPos);
       if (!inPit && ct.dist > TRACK_WIDTH / 2 + 1.5) {
@@ -1571,14 +1596,17 @@ export default function RacingGame() {
 
       // Heading + lateral slide physics
       const speedFactor = Math.min(1, Math.abs(speed) / 12);
-      const turnRate = STEER_RATE * speedFactor * (speed >= 0 ? 1 : -1);
-      const dHeading = steering * turnRate * dt;
+      const turnRate = STEER_RATE * speedFactor * (speed >= 0 ? 1 : -1) * (0.7 + 0.3 * grip);
+      // Hydroplaning wobble: tiny random heading drift, low steering authority
+      const hydroWobble = hydro * (Math.random() - 0.5) * 0.8 * dt;
+      const dHeading = steering * turnRate * dt * (1 - hydro * 0.6) + hydroWobble;
       heading += dHeading;
 
       // Slide: lateral vel from sharp turning at high speed
-      const lateralAccel = -dHeading * speed * 0.6;
+      const lateralAccel = -dHeading * speed * (0.6 + (1 - grip) * 0.5);
       lateralVel += lateralAccel;
-      lateralVel *= Math.pow(0.04, dt); // grip recovery
+      // Lower grip => slide persists longer
+      lateralVel *= Math.pow(0.04 + (1 - grip) * 0.35, dt);
 
       // Move forward + sideways
       const fx = Math.sin(heading), fz = Math.cos(heading);
@@ -1596,8 +1624,16 @@ export default function RacingGame() {
         const nx = dx / len, nz = dz / len;
         carPos.x = center.x + nx * WALL_LIMIT;
         carPos.z = center.z + nz * WALL_LIMIT;
-        speed *= 0.9;     // gentle scrape, not a full stop
-        lateralVel *= -0.2;
+        const impact = Math.min(1, Math.abs(speed) / MAX_SPEED);
+        speed *= 0.88 - impact * 0.05;
+        lateralVel *= -0.25;
+        camTrauma = Math.min(1, camTrauma + 0.25 + impact * 0.5);
+        // Sparks while scraping
+        for (let s = 0; s < 4; s++) {
+          spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
+            color: 0xffb648, life: 0.25 + Math.random() * 0.2, scale: 0.35, opacity: 0.9, y: 0.3,
+          });
+        }
       }
 
       // Cone collisions (hitboxes)
