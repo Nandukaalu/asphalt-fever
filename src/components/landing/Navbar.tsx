@@ -40,6 +40,12 @@ export default function Navbar() {
         </nav>
         <div className="flex items-center gap-2">
           <Link
+            to="/garage"
+            className="hidden sm:inline-flex tap-target px-4 items-center rounded-full glass text-xs font-display uppercase tracking-widest hover:shadow-cyan transition-all"
+          >
+            Garage
+          </Link>
+          <Link
             to="/customize"
             className="hidden sm:inline-flex tap-target px-4 items-center rounded-full glass text-xs font-display uppercase tracking-widest hover:shadow-cyan transition-all"
           >
@@ -73,6 +79,12 @@ export default function Navbar() {
                 {l.label}
               </a>
             ))}
+            <Link
+              to="/garage"
+              className="tap-target px-3 flex items-center rounded-lg hover:bg-secondary font-display uppercase tracking-widest text-sm"
+            >
+              Garage
+            </Link>
             <Link
               to="/customize"
               className="tap-target px-3 flex items-center rounded-lg hover:bg-secondary font-display uppercase tracking-widest text-sm"
