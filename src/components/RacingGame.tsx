@@ -2027,6 +2027,43 @@ export default function RacingGame() {
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
         setResult({ position: adjustedPosition, bestLap, points });
+        // Build full classification (positions, names, points, best laps) and detect fastest lap
+        {
+          const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
+          const lapsByDriver = new Map<string, number>();
+          lapsByDriver.set(driver.id, bestLap);
+          if (isMulti) {
+            remotesRef.current.forEach((rp, id) => {
+              const rl = remoteLap.get(id);
+              if (rl && rl.bestLap > 0) lapsByDriver.set(rp.driverId, rl.bestLap);
+            });
+          } else {
+            ais.forEach((ai) => { if (ai.bestLap > 0) lapsByDriver.set(ai.driver.id, ai.bestLap); });
+          }
+          let flId: string | undefined;
+          let flTime = Infinity;
+          lapsByDriver.forEach((t, id) => { if (t > 0 && t < flTime) { flTime = t; flId = id; } });
+          setFastestLapId(flId);
+          const nameForRemote = new Map<string, string>();
+          if (isMulti) remotesRef.current.forEach((rp) => nameForRemote.set(rp.driverId, rp.name || ""));
+          const POINTS_TABLE = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+          const cls: PodiumEntry[] = order.map((id, i) => {
+            const drv = DRIVERS.find((d) => d.id === id) ?? DRIVERS[0];
+            const isP = id === driver.id;
+            const remoteName = nameForRemote.get(id);
+            return {
+              id,
+              name: isP ? (playerName || drv.name) : (remoteName || drv.name),
+              team: drv.team,
+              color: toHex2(drv.primary),
+              number: drv.number,
+              bestLap: lapsByDriver.get(id),
+              points: POINTS_TABLE[i] ?? 0,
+              isPlayer: isP,
+            };
+          });
+          setClassification(cls);
+        }
         if (mode === "career") {
           const cur: CareerSave = loadSave() ?? {
             driverId: driver.id, points: 0, completed: {}, standings: {}, rounds: [],
