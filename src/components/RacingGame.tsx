@@ -13,6 +13,7 @@ import { FriendsPanel } from "./Friends";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "@tanstack/react-router";
 import { Users } from "lucide-react";
+import PodiumCeremony, { type PodiumEntry } from "./PodiumCeremony";
 
 // ---------------- Types ----------------
 type Driver = {
