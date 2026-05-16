@@ -1893,14 +1893,29 @@ export default function RacingGame() {
         // Track drift distance in meters (m/s * dt) — physics speed is roughly m/s scale
         sessDriftDist += Math.abs(speed) * dt;
       }
+      // Water spray on wet track at speed (and extra during hydroplaning)
+      if (wetness > 0.15 && Math.abs(speed) > 14) {
+        const back = new THREE.Vector3(0, 0, -1.1).applyEuler(new THREE.Euler(0, heading, 0));
+        const sideR = new THREE.Vector3(0.8, 0, 0).applyEuler(new THREE.Euler(0, heading, 0));
+        const sprayCount = hydro > 0 ? 3 : 1;
+        for (let s = 0; s < sprayCount; s++) {
+          spawnSmoke(carPos.x + back.x + sideR.x, carPos.z + back.z + sideR.z, {
+            color: 0xbcd0e0, life: 0.45, scale: 0.7, opacity: 0.55, rise: 1.8, y: 0.2,
+          });
+          spawnSmoke(carPos.x + back.x - sideR.x, carPos.z + back.z - sideR.z, {
+            color: 0xbcd0e0, life: 0.45, scale: 0.7, opacity: 0.55, rise: 1.8, y: 0.2,
+          });
+        }
+      }
       for (const p of smokes) {
         if (!p.mesh.visible) continue;
         p.life -= dt;
         if (p.life <= 0) { p.mesh.visible = false; continue; }
         const k = p.life / p.maxLife;
-        (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75 * k;
+        (p.mesh.material as THREE.MeshBasicMaterial).opacity = p.baseOpacity * k;
         p.mesh.scale.x += dt * 1.2;
         p.mesh.scale.y += dt * 1.2;
+        if (p.rise) p.mesh.position.y += p.rise * dt * k;
       }
 
       // HUD
