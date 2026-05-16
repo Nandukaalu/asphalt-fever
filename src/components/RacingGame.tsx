@@ -1205,24 +1205,32 @@ export default function RacingGame() {
       blending: THREE.NormalBlending,
     });
     const smokeGeo = new THREE.PlaneGeometry(0.9, 0.9);
-    type Puff = { mesh: THREE.Mesh; life: number; maxLife: number };
+    type Puff = { mesh: THREE.Mesh; life: number; maxLife: number; rise: number; baseOpacity: number };
     const smokes: Puff[] = [];
     for (let i = 0; i < SMOKE_COUNT; i++) {
       const m = new THREE.Mesh(smokeGeo, smokeMat.clone());
       m.rotation.x = -Math.PI / 2;
       m.visible = false;
       scene.add(m);
-      smokes.push({ mesh: m, life: 0, maxLife: 1 });
+      smokes.push({ mesh: m, life: 0, maxLife: 1, rise: 0, baseOpacity: 0.75 });
     }
     let smokeIdx = 0;
-    function spawnSmoke(x: number, z: number) {
+    function spawnSmoke(
+      x: number,
+      z: number,
+      opts?: { color?: number; life?: number; scale?: number; opacity?: number; rise?: number; y?: number },
+    ) {
       const p = smokes[smokeIdx++ % SMOKE_COUNT];
-      p.mesh.position.set(x, 0.05, z);
-      p.mesh.scale.setScalar(0.6 + Math.random() * 0.4);
-      p.life = 0.8 + Math.random() * 0.4;
+      const mat = p.mesh.material as THREE.MeshBasicMaterial;
+      mat.color.setHex(opts?.color ?? 0xeeeeee);
+      p.mesh.position.set(x, opts?.y ?? 0.05, z);
+      p.mesh.scale.setScalar((opts?.scale ?? 1) * (0.6 + Math.random() * 0.4));
+      p.life = opts?.life ?? (0.8 + Math.random() * 0.4);
       p.maxLife = p.life;
+      p.rise = opts?.rise ?? 0;
+      p.baseOpacity = opts?.opacity ?? 0.75;
       p.mesh.visible = true;
-      (p.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75;
+      mat.opacity = p.baseOpacity;
     }
 
     // Wet road darkening overlay (simple ambient tint via fog already; bump exposure dn if wet)
