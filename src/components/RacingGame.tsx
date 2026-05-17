@@ -410,6 +410,15 @@ export default function RacingGame() {
   const lastReplayFramesRef = useRef<ReplayFrame[]>([]);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
 
+  // Camera mode + distance, persisted across sessions
+  const [cameraMode, setCameraMode] = useState<CamMode>(() => loadCamPrefs().mode);
+  const [camDistance, setCamDistance] = useState<number>(() => loadCamPrefs().distance);
+  const cameraPrefsRef = useRef<CamPrefs>(loadCamPrefs());
+  useEffect(() => {
+    cameraPrefsRef.current = { mode: cameraMode, distance: camDistance };
+    saveCamPrefs(cameraPrefsRef.current);
+  }, [cameraMode, camDistance]);
+
   // -------- Multiplayer state --------
   const [roomCode, setRoomCode] = useState<string>("");
   const [playerName, setPlayerName] = useState<string>(() => {
