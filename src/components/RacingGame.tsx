@@ -2488,6 +2488,25 @@ export default function RacingGame() {
             Quit
           </button>
 
+          {/* Camera mode switcher */}
+          <CameraSwitcher
+            mode={cameraMode}
+            distance={camDistance}
+            onToggle={() => setCameraMode((m) => (m === "chase" ? "cockpit" : "chase"))}
+            onDistance={setCamDistance}
+          />
+
+          {/* Cockpit / FPV overlay */}
+          {cameraMode === "cockpit" && (
+            <CockpitOverlay
+              speed={hud.speed}
+              gear={hud.gear}
+              steer={touchRef.current.steer}
+              wet={WEATHERS.find((w) => w.id === weatherId)?.wet ?? false}
+              rain={WEATHERS.find((w) => w.id === weatherId)?.rain ?? 0}
+            />
+          )}
+
           {countdown !== null && (
             <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none select-none">
               <div
