@@ -179,6 +179,25 @@ function loadWeather(): WeatherId {
   return WEATHERS.find((w) => w.id === v)?.id ?? "clear-night";
 }
 
+// ---- Camera preferences ----
+const CAM_KEY = "af-camera-v1";
+type CamMode = "chase" | "cockpit";
+type CamPrefs = { mode: CamMode; distance: number };
+function loadCamPrefs(): CamPrefs {
+  if (typeof window === "undefined") return { mode: "chase", distance: 1 };
+  try {
+    const raw = localStorage.getItem(CAM_KEY);
+    if (!raw) return { mode: "chase", distance: 1 };
+    const v = JSON.parse(raw);
+    const mode: CamMode = v?.mode === "cockpit" ? "cockpit" : "chase";
+    const distance = Math.max(0.7, Math.min(1.6, Number(v?.distance) || 1));
+    return { mode, distance };
+  } catch { return { mode: "chase", distance: 1 }; }
+}
+function saveCamPrefs(p: CamPrefs) {
+  try { localStorage.setItem(CAM_KEY, JSON.stringify(p)); } catch {}
+}
+
 // ---- Custom garage drivers (from /customize page) ----
 function hexToInt(hex: string, fallback: number): number {
   if (!hex || typeof hex !== "string") return fallback;
@@ -390,6 +409,15 @@ export default function RacingGame() {
   const [showFriends, setShowFriends] = useState(false);
   const lastReplayFramesRef = useRef<ReplayFrame[]>([]);
   const touchRef = useRef({ accel: false, brake: false, steer: 0, handbrake: false });
+
+  // Camera mode + distance, persisted across sessions
+  const [cameraMode, setCameraMode] = useState<CamMode>(() => loadCamPrefs().mode);
+  const [camDistance, setCamDistance] = useState<number>(() => loadCamPrefs().distance);
+  const cameraPrefsRef = useRef<CamPrefs>(loadCamPrefs());
+  useEffect(() => {
+    cameraPrefsRef.current = { mode: cameraMode, distance: camDistance };
+    saveCamPrefs(cameraPrefsRef.current);
+  }, [cameraMode, camDistance]);
 
   // -------- Multiplayer state --------
   const [roomCode, setRoomCode] = useState<string>("");
@@ -1329,11 +1357,17 @@ export default function RacingGame() {
 
     // ---------- Input ----------
     const keys: Record<string, boolean> = {};
-    let camMode: "chase" | "cockpit" = "chase";
+    // Camera mode and distance read from cameraPrefsRef so React UI and game loop stay in sync
+    const toggleCamMode = () => {
+      const cur = cameraPrefsRef.current.mode;
+      const next: CamMode = cur === "chase" ? "cockpit" : "chase";
+      cameraPrefsRef.current = { ...cameraPrefsRef.current, mode: next };
+      setCameraMode(next);
+    };
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       keys[k] = true;
-      if (k === "c") camMode = camMode === "chase" ? "cockpit" : "chase";
+      if (k === "c") toggleCamMode();
       if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
     };
     const onKeyUp = (e: KeyboardEvent) => { keys[e.key.toLowerCase()] = false; };
@@ -1818,29 +1852,43 @@ export default function RacingGame() {
       // ---------- Camera ----------
       let camWorld: THREE.Vector3;
       let lookY = 1.0;
+      const camMode = cameraPrefsRef.current.mode;
+      const camDist = cameraPrefsRef.current.distance;
       if (camMode === "chase") {
-        // Chase cam: behind & above car
-        const back = new THREE.Vector3(0, 4.5, -10).applyEuler(new THREE.Euler(0, heading, 0));
+        // Chase cam: behind & above car, distance scaled by player preference + speed pullback
+        const speedPull = (Math.abs(speed) / MAX_SPEED) * 2.2; // dynamic pull-back at high speed
+        const back = new THREE.Vector3(
+          0,
+          4.5 * (0.85 + camDist * 0.2),
+          -(10 * camDist + speedPull)
+        ).applyEuler(new THREE.Euler(0, heading + bodyRoll * 0.15, 0));
         camWorld = player.group.position.clone().add(back);
         lookY = 1.5;
       } else {
-        const off = new THREE.Vector3(0, 1.05, -0.4).applyEuler(new THREE.Euler(0, heading, 0));
+        // Cockpit / FPV: just behind windshield, slight bob with body pitch
+        const off = new THREE.Vector3(0, 1.05 + bodyPitch * 0.04, -0.35).applyEuler(
+          new THREE.Euler(0, heading, 0)
+        );
         camWorld = player.group.position.clone().add(off);
       }
       // Camera shake: base from speed, amplified by trauma (impacts) + hydroplaning rumble
       camTrauma = Math.max(0, camTrauma - dt * 1.6);
-      const shake = (Math.abs(speed) / MAX_SPEED) * 0.06 + camTrauma * 0.35 + hydro * 0.12;
+      // Cockpit gets stronger helmet shake for immersion
+      const shakeBase = camMode === "cockpit" ? 0.09 : 0.06;
+      const shake = (Math.abs(speed) / MAX_SPEED) * shakeBase + camTrauma * 0.35 + hydro * 0.12;
       camWorld.x += (Math.random() - 0.5) * shake;
       camWorld.y += (Math.random() - 0.5) * shake * 0.7;
       camWorld.z += (Math.random() - 0.5) * shake * 0.4;
-      camera.position.lerp(camWorld, camMode === "chase" ? 0.15 : 0.5);
+      // Smooth transition: lower lerp factor means both mode-switches and chase follow are buttery.
+      // Cockpit uses higher lerp so it tracks the car tightly without floatiness.
+      camera.position.lerp(camWorld, camMode === "chase" ? 0.12 : 0.35);
       const lookTarget = new THREE.Vector3(
         player.group.position.x + Math.sin(heading) * 12,
         lookY,
         player.group.position.z + Math.cos(heading) * 12
       );
       camera.lookAt(lookTarget);
-      const targetFov = (camMode === "chase" ? 65 : 72) + (Math.abs(speed) / MAX_SPEED) * 16;
+      const targetFov = (camMode === "chase" ? 65 : 78) + (Math.abs(speed) / MAX_SPEED) * (camMode === "cockpit" ? 20 : 16);
       camera.fov += (targetFov - camera.fov) * 0.08;
       camera.updateProjectionMatrix();
 
@@ -2439,6 +2487,25 @@ export default function RacingGame() {
           >
             Quit
           </button>
+
+          {/* Camera mode switcher */}
+          <CameraSwitcher
+            mode={cameraMode}
+            distance={camDistance}
+            onToggle={() => setCameraMode((m) => (m === "chase" ? "cockpit" : "chase"))}
+            onDistance={setCamDistance}
+          />
+
+          {/* Cockpit / FPV overlay */}
+          {cameraMode === "cockpit" && (
+            <CockpitOverlay
+              speed={hud.speed}
+              gear={hud.gear}
+              steer={touchRef.current.steer}
+              wet={WEATHERS.find((w) => w.id === weatherId)?.wet ?? false}
+              rain={WEATHERS.find((w) => w.id === weatherId)?.rain ?? 0}
+            />
+          )}
 
           {countdown !== null && (
             <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none select-none">
@@ -3256,6 +3323,151 @@ function WeatherSelect({ weatherId, onPick }: { weatherId: WeatherId; onPick: (i
               </button>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CameraSwitcher({
+  mode,
+  distance,
+  onToggle,
+  onDistance,
+}: {
+  mode: CamMode;
+  distance: number;
+  onToggle: () => void;
+  onDistance: (v: number) => void;
+}) {
+  return (
+    <div className="absolute top-4 right-4 z-30 flex flex-col items-end gap-2 pointer-events-auto select-none">
+      <button
+        onClick={onToggle}
+        className="px-3 py-2 rounded-xl bg-black/55 backdrop-blur border border-white/15 text-white text-[11px] uppercase tracking-widest font-display hover:border-cyan-300/70 hover:bg-black/70 transition-all shadow-[0_0_20px_rgba(34,211,238,0.18)] flex items-center gap-2"
+        title="Switch camera (C)"
+      >
+        <span className="text-base leading-none">{mode === "chase" ? "🎥" : "🪖"}</span>
+        <span>{mode === "chase" ? "Chase" : "Cockpit"}</span>
+        <span className="text-white/40 text-[9px] ml-1 hidden sm:inline">[C]</span>
+      </button>
+      {mode === "chase" && (
+        <div className="bg-black/55 backdrop-blur border border-white/10 rounded-xl px-2.5 py-1.5 flex items-center gap-2">
+          <span className="text-[9px] uppercase tracking-widest text-white/50">Dist</span>
+          <input
+            type="range"
+            min={0.7}
+            max={1.6}
+            step={0.05}
+            value={distance}
+            onChange={(e) => onDistance(parseFloat(e.target.value))}
+            className="w-24 accent-cyan-400 touch-none"
+          />
+          <span className="text-[10px] tabular-nums text-white/80 w-8 text-right">{distance.toFixed(2)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CockpitOverlay({
+  speed,
+  gear,
+  steer,
+  wet,
+  rain,
+}: {
+  speed: number;
+  gear: number;
+  steer: number;
+  wet: boolean;
+  rain: number;
+}) {
+  // Stable raindrop layout per session
+  const drops = useMemo(() => {
+    return Array.from({ length: 28 }, () => ({
+      left: Math.random() * 100,
+      top: 4 + Math.random() * 60,
+      size: 4 + Math.random() * 8,
+      delay: Math.random() * 2,
+      dur: 1.6 + Math.random() * 1.8,
+    }));
+  }, []);
+  const wheelRot = Math.max(-95, Math.min(95, steer * 95));
+  const dropCount = wet ? Math.round(drops.length * Math.min(1, rain)) : 0;
+  return (
+    <div className="absolute inset-0 z-[15] pointer-events-none select-none">
+      {/* A-pillar / windshield frame vignette */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 75% 70% at 50% 42%, transparent 55%, rgba(0,0,0,0.75) 95%)",
+          mixBlendMode: "multiply",
+        }}
+      />
+      {/* Top windshield band (sun visor) */}
+      <div className="absolute inset-x-0 top-0 h-[12%] bg-gradient-to-b from-black/85 to-transparent" />
+      {/* Side A-pillars */}
+      <div className="absolute top-0 bottom-[28%] left-0 w-[6%] bg-gradient-to-r from-black/85 to-transparent" />
+      <div className="absolute top-0 bottom-[28%] right-0 w-[6%] bg-gradient-to-l from-black/85 to-transparent" />
+      {/* Rain droplets on windshield */}
+      {wet && (
+        <div className="absolute inset-0 overflow-hidden">
+          {drops.slice(0, dropCount).map((d, i) => (
+            <span
+              key={i}
+              className="absolute rounded-full bg-white/25 backdrop-blur-[1px]"
+              style={{
+                left: `${d.left}%`,
+                top: `${d.top}%`,
+                width: d.size,
+                height: d.size * 1.4,
+                boxShadow: "inset 0 -2px 3px rgba(255,255,255,0.55), 0 1px 1px rgba(0,0,0,0.4)",
+                animation: `cockpit-drop ${d.dur}s ${d.delay}s linear infinite`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+      {/* Dashboard */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-[34%] sm:h-[30%]"
+        style={{
+          background:
+            "linear-gradient(to top, rgba(8,8,12,0.98) 0%, rgba(15,15,22,0.95) 60%, rgba(20,20,28,0.5) 90%, transparent 100%)",
+          boxShadow: "inset 0 18px 28px rgba(0,0,0,0.65)",
+        }}
+      >
+        {/* Stitching highlight */}
+        <div className="absolute top-2 inset-x-8 h-px bg-gradient-to-r from-transparent via-red-500/40 to-transparent" />
+        {/* Steering wheel */}
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-[-22%] sm:bottom-[-18%] w-[55%] max-w-[420px] aspect-square">
+          <div
+            className="absolute inset-0 transition-transform duration-75"
+            style={{ transform: `rotate(${wheelRot}deg)` }}
+          >
+            {/* Wheel ring */}
+            <div className="absolute inset-0 rounded-full border-[10px] border-black bg-gradient-to-b from-zinc-900 to-black shadow-[0_-10px_30px_rgba(0,0,0,0.8),inset_0_4px_10px_rgba(255,255,255,0.06)]" />
+            {/* Spokes */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-3 bg-zinc-800 rounded-sm" />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 w-3 h-[40%] bg-zinc-800 rounded-sm origin-top" />
+            {/* Center hub w/ team badge */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[34%] h-[20%] rounded-md bg-gradient-to-b from-zinc-800 to-black border border-red-600/60 flex items-center justify-center shadow-[0_0_18px_rgba(220,0,0,0.45)]">
+              <span className="text-[10px] sm:text-xs font-black tracking-[0.3em] text-red-500">AF</span>
+            </div>
+            {/* Top marker */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-2 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_#ff3030]" />
+          </div>
+        </div>
+        {/* Mini dashboard readout (left of wheel) */}
+        <div className="absolute left-4 bottom-4 sm:left-8 sm:bottom-6 flex flex-col items-start gap-1 text-white font-mono">
+          <div className="text-[9px] uppercase tracking-widest text-white/40">Gear</div>
+          <div className="text-3xl font-black text-orange-400 leading-none drop-shadow-[0_0_10px_rgba(255,106,26,0.7)]">{gear}</div>
+        </div>
+        <div className="absolute right-4 bottom-4 sm:right-8 sm:bottom-6 flex flex-col items-end gap-1 text-white font-mono">
+          <div className="text-[9px] uppercase tracking-widest text-white/40">km/h</div>
+          <div className="text-3xl font-black tabular-nums text-cyan-300 leading-none drop-shadow-[0_0_10px_rgba(34,211,238,0.7)]">{Math.round(speed)}</div>
         </div>
       </div>
     </div>
