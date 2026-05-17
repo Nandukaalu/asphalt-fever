@@ -280,10 +280,3 @@
   animation: shimmer 6s linear infinite;
 }
 .tap-target { min-height: 44px; }
-
-@keyframes cockpit-drop {
-  0% { transform: translateY(0) scaleY(1); opacity: 0; }
-  10% { opacity: 0.9; }
-  70% { opacity: 0.85; }
-  100% { transform: translateY(120px) scaleY(1.4); opacity: 0; }
-}
