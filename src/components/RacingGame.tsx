@@ -2070,7 +2070,6 @@ export default function RacingGame() {
         const impact = Math.min(1, Math.abs(speed) / MAX_SPEED);
         speed *= 0.88 - impact * 0.05;
         lateralVel *= -0.25;
-        camTrauma = Math.min(1, camTrauma + 0.25 + impact * 0.5);
         // Sparks while scraping
         for (let s = 0; s < 4; s++) {
           spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
@@ -2093,12 +2092,10 @@ export default function RacingGame() {
       }
 
       player.group.position.set(carPos.x, pitLiftY, carPos.z);
-      // Weight transfer: pitch from accel/brake, roll from cornering
-      const pitchTarget = ((brake ? 1 : 0) - (accel ? 1 : 0)) * 0.05 * (0.4 + speedFrac * 0.6);
-      const rollTarget = -steering * 0.07 * (0.3 + speedFrac * 0.7);
-      bodyPitch += (pitchTarget - bodyPitch) * Math.min(1, dt * 6);
-      bodyRoll += (rollTarget - bodyRoll) * Math.min(1, dt * 6);
-      player.group.rotation.set(bodyPitch, heading, bodyRoll);
+      // Flat car orientation (classic feel — no weight transfer)
+      bodyPitch = 0;
+      bodyRoll = 0;
+      player.group.rotation.set(0, heading, 0);
 
       const wheelSpin = (speed * dt) / 0.36;
       player.wheels.forEach((w) => (w.rotation.x += wheelSpin));
