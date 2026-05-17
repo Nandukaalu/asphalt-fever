@@ -1357,11 +1357,17 @@ export default function RacingGame() {
 
     // ---------- Input ----------
     const keys: Record<string, boolean> = {};
-    let camMode: "chase" | "cockpit" = "chase";
+    // Camera mode and distance read from cameraPrefsRef so React UI and game loop stay in sync
+    const toggleCamMode = () => {
+      const cur = cameraPrefsRef.current.mode;
+      const next: CamMode = cur === "chase" ? "cockpit" : "chase";
+      cameraPrefsRef.current = { ...cameraPrefsRef.current, mode: next };
+      setCameraMode(next);
+    };
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       keys[k] = true;
-      if (k === "c") camMode = camMode === "chase" ? "cockpit" : "chase";
+      if (k === "c") toggleCamMode();
       if ([" ", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) e.preventDefault();
     };
     const onKeyUp = (e: KeyboardEvent) => { keys[e.key.toLowerCase()] = false; };
