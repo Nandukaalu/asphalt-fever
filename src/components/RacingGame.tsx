@@ -1852,29 +1852,43 @@ export default function RacingGame() {
       // ---------- Camera ----------
       let camWorld: THREE.Vector3;
       let lookY = 1.0;
+      const camMode = cameraPrefsRef.current.mode;
+      const camDist = cameraPrefsRef.current.distance;
       if (camMode === "chase") {
-        // Chase cam: behind & above car
-        const back = new THREE.Vector3(0, 4.5, -10).applyEuler(new THREE.Euler(0, heading, 0));
+        // Chase cam: behind & above car, distance scaled by player preference + speed pullback
+        const speedPull = (Math.abs(speed) / MAX_SPEED) * 2.2; // dynamic pull-back at high speed
+        const back = new THREE.Vector3(
+          0,
+          4.5 * (0.85 + camDist * 0.2),
+          -(10 * camDist + speedPull)
+        ).applyEuler(new THREE.Euler(0, heading + bodyRoll * 0.15, 0));
         camWorld = player.group.position.clone().add(back);
         lookY = 1.5;
       } else {
-        const off = new THREE.Vector3(0, 1.05, -0.4).applyEuler(new THREE.Euler(0, heading, 0));
+        // Cockpit / FPV: just behind windshield, slight bob with body pitch
+        const off = new THREE.Vector3(0, 1.05 + bodyPitch * 0.04, -0.35).applyEuler(
+          new THREE.Euler(0, heading, 0)
+        );
         camWorld = player.group.position.clone().add(off);
       }
       // Camera shake: base from speed, amplified by trauma (impacts) + hydroplaning rumble
       camTrauma = Math.max(0, camTrauma - dt * 1.6);
-      const shake = (Math.abs(speed) / MAX_SPEED) * 0.06 + camTrauma * 0.35 + hydro * 0.12;
+      // Cockpit gets stronger helmet shake for immersion
+      const shakeBase = camMode === "cockpit" ? 0.09 : 0.06;
+      const shake = (Math.abs(speed) / MAX_SPEED) * shakeBase + camTrauma * 0.35 + hydro * 0.12;
       camWorld.x += (Math.random() - 0.5) * shake;
       camWorld.y += (Math.random() - 0.5) * shake * 0.7;
       camWorld.z += (Math.random() - 0.5) * shake * 0.4;
-      camera.position.lerp(camWorld, camMode === "chase" ? 0.15 : 0.5);
+      // Smooth transition: lower lerp factor means both mode-switches and chase follow are buttery.
+      // Cockpit uses higher lerp so it tracks the car tightly without floatiness.
+      camera.position.lerp(camWorld, camMode === "chase" ? 0.12 : 0.35);
       const lookTarget = new THREE.Vector3(
         player.group.position.x + Math.sin(heading) * 12,
         lookY,
         player.group.position.z + Math.cos(heading) * 12
       );
       camera.lookAt(lookTarget);
-      const targetFov = (camMode === "chase" ? 65 : 72) + (Math.abs(speed) / MAX_SPEED) * 16;
+      const targetFov = (camMode === "chase" ? 65 : 78) + (Math.abs(speed) / MAX_SPEED) * (camMode === "cockpit" ? 20 : 16);
       camera.fov += (targetFov - camera.fov) * 0.08;
       camera.updateProjectionMatrix();
 
