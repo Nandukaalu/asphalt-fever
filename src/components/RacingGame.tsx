@@ -1890,6 +1890,49 @@ export default function RacingGame() {
 
       const t = touchRef.current;
       const inPit = pitActiveRef.current;
+
+      // ---------- TV/Media car cue driver ----------
+      const wantMode: typeof mediaCue.mode = raceFinished ? "podium" : (inPit ? "pit" : "idle");
+      if (wantMode !== mediaCue.mode) {
+        mediaCue.mode = wantMode;
+        mediaCue.active = wantMode !== "idle";
+        mediaCue.t0 = now;
+      }
+      {
+        const elapsed = (now - mediaCue.t0) / 1000;
+        for (let mi = 0; mi < mediaCars.length; mi++) {
+          const mc = mediaCars[mi];
+          const stagger = mi * 0.6;
+          if (mediaCue.active) {
+            // Drive forward along pit lane direction with stagger
+            const speedMc = mediaCue.mode === "podium" ? 7 : 5;
+            const dist = Math.max(0, (elapsed - stagger)) * speedMc;
+            // Loop along pit lane length
+            const loop = ((dist % mc.length) + mc.length) % mc.length;
+            mc.group.position.set(
+              mc.startPos.x + Math.sin(mc.heading) * loop,
+              0,
+              mc.startPos.z + Math.cos(mc.heading) * loop,
+            );
+            // Light + occasional camera flash
+            mc.light.intensity = 1.4;
+            mc.blink += dt;
+            const fmat = mc.flash.material as THREE.MeshBasicMaterial;
+            if (mc.blink > 0.6 + Math.random() * 0.8) {
+              fmat.opacity = 1;
+              mc.blink = 0;
+            } else {
+              fmat.opacity = Math.max(0, fmat.opacity - dt * 3.5);
+            }
+          } else {
+            // Glide back to parked pose
+            mc.group.position.lerp(mc.startPos, Math.min(1, dt * 1.2));
+            mc.light.intensity = 0;
+            (mc.flash.material as THREE.MeshBasicMaterial).opacity = 0;
+          }
+        }
+      }
+
       const accel = !raceFinished && !inPit && (keys["w"] || keys["arrowup"] || t.accel);
       const brake = !raceFinished && !inPit && (keys["s"] || keys["arrowdown"] || t.brake);
       const leftKey = keys["a"] || keys["arrowleft"];
