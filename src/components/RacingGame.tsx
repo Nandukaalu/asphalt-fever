@@ -885,6 +885,81 @@ export default function RacingGame() {
     // Track pit lift Y for the player car (set by animate loop)
     let pitLiftY = 0;
 
+    // ===== TV / media cars — event-timed (pit stops + podium) =====
+    type MediaCar = {
+      group: THREE.Group;
+      startPos: THREE.Vector3;
+      heading: number;
+      length: number; // pit-lane parametric travel length
+      light: THREE.PointLight;
+      flash: THREE.Mesh; // camera flash plate on roof
+      blink: number;
+    };
+    const mediaCue = { active: false, t0: 0, mode: "idle" as "idle" | "pit" | "podium" };
+    const mediaCars: MediaCar[] = [];
+    {
+      const liveryColors = [0xffffff, 0x111111, 0x22d3ee];
+      const tag = ["TV", "MEDIA", "LIVE"];
+      for (let i = 0; i < 3; i++) {
+        const g = new THREE.Group();
+        const bodyMat = new THREE.MeshStandardMaterial({
+          color: liveryColors[i], roughness: 0.45, metalness: 0.55,
+          emissive: i === 2 ? 0x0a1a22 : 0x000000, emissiveIntensity: 0.3,
+        });
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.1, 4.0), bodyMat);
+        body.position.y = 0.7; body.castShadow = true; g.add(body);
+        const cab = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.9, 1.9),
+          new THREE.MeshStandardMaterial({ color: 0x05060a, roughness: 0.3, metalness: 0.9 }));
+        cab.position.set(0, 1.5, -0.2); g.add(cab);
+        // Camera rig on roof
+        const rig = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.8),
+          new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.6 }));
+        rig.position.set(0, 2.1, 0.4); g.add(rig);
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.5, 12),
+          new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.2, metalness: 0.9 }));
+        lens.rotation.z = Math.PI / 2; lens.position.set(0, 2.1, 0.95); g.add(lens);
+        // "TV" sign on side
+        const signCv = document.createElement("canvas");
+        signCv.width = 128; signCv.height = 64;
+        const sctx2 = signCv.getContext("2d")!;
+        sctx2.fillStyle = "#ef1a2a"; sctx2.fillRect(0, 0, 128, 64);
+        sctx2.fillStyle = "#fff"; sctx2.font = "bold 36px sans-serif";
+        sctx2.textAlign = "center"; sctx2.textBaseline = "middle";
+        sctx2.fillText(tag[i], 64, 34);
+        const signTex = new THREE.CanvasTexture(signCv);
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.7),
+          new THREE.MeshBasicMaterial({ map: signTex }));
+        sign.position.set(0.91, 0.95, 0.2); sign.rotation.y = Math.PI / 2; g.add(sign);
+        const sign2 = sign.clone();
+        sign2.position.x = -0.91; sign2.rotation.y = -Math.PI / 2; g.add(sign2);
+        // Wheels
+        const wMat = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.95 });
+        const wGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.28, 14);
+        [[-0.85, 1.4], [0.85, 1.4], [-0.85, -1.4], [0.85, -1.4]].forEach(([x, z]) => {
+          const w = new THREE.Mesh(wGeo, wMat);
+          w.rotation.z = Math.PI / 2; w.position.set(x, 0.34, z); g.add(w);
+        });
+        // Camera flash plate
+        const flash = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.6, 0.3),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending }),
+        );
+        flash.position.set(0, 2.45, 0.7); flash.rotation.x = -Math.PI / 3; g.add(flash);
+        const light = new THREE.PointLight(0x99e6ff, 0, 14, 2);
+        light.position.set(0, 3, 0); g.add(light);
+
+        // Parked along pit lane, behind the garage wall
+        const startPos = pitCenter.clone()
+          .addScaledVector(pitForward, -20 + i * 6)
+          .addScaledVector(pitN, 8.5);
+        g.position.copy(startPos);
+        g.rotation.y = pitHeading;
+        g.visible = true;
+        scene.add(g);
+        mediaCars.push({ group: g, startPos, heading: pitHeading, length: 46, light, flash, blink: Math.random() * 6 });
+      }
+    }
+
     // Grandstands (dark with neon edge)
     const standMat = new THREE.MeshStandardMaterial({ color: 0x1a1428, roughness: 0.6, metalness: 0.4, emissive: 0x22d3ee, emissiveIntensity: 0.08 });
     for (let i = 0; i < 14; i++) {
