@@ -179,6 +179,25 @@ function loadWeather(): WeatherId {
   return WEATHERS.find((w) => w.id === v)?.id ?? "clear-night";
 }
 
+// ---- Camera preferences ----
+const CAM_KEY = "af-camera-v1";
+type CamMode = "chase" | "cockpit";
+type CamPrefs = { mode: CamMode; distance: number };
+function loadCamPrefs(): CamPrefs {
+  if (typeof window === "undefined") return { mode: "chase", distance: 1 };
+  try {
+    const raw = localStorage.getItem(CAM_KEY);
+    if (!raw) return { mode: "chase", distance: 1 };
+    const v = JSON.parse(raw);
+    const mode: CamMode = v?.mode === "cockpit" ? "cockpit" : "chase";
+    const distance = Math.max(0.7, Math.min(1.6, Number(v?.distance) || 1));
+    return { mode, distance };
+  } catch { return { mode: "chase", distance: 1 }; }
+}
+function saveCamPrefs(p: CamPrefs) {
+  try { localStorage.setItem(CAM_KEY, JSON.stringify(p)); } catch {}
+}
+
 // ---- Custom garage drivers (from /customize page) ----
 function hexToInt(hex: string, fallback: number): number {
   if (!hex || typeof hex !== "string") return fallback;
