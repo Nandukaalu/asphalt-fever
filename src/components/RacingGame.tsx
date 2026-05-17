@@ -2042,16 +2042,20 @@ export default function RacingGame() {
         speed -= Math.sign(speed) * Math.min(Math.abs(speed), OFF_TRACK_DRAG * dt);
       }
 
-      // Simple arcade steering — no lateral slide
+      // Heading + lateral slide physics (classic feel)
       const speedFactor = Math.min(1, Math.abs(speed) / 12);
       const turnRate = STEER_RATE * speedFactor * (speed >= 0 ? 1 : -1);
-      heading += steering * turnRate * dt;
-      lateralVel = 0;
+      const dHeading = steering * turnRate * dt;
+      heading += dHeading;
+      const lateralAccel = -dHeading * speed * 0.6;
+      lateralVel += lateralAccel;
+      lateralVel *= Math.pow(0.04, dt);
 
-      // Move forward
+      // Move forward + sideways
       const fx = Math.sin(heading), fz = Math.cos(heading);
-      carPos.x += fx * speed * dt;
-      carPos.z += fz * speed * dt;
+      const sx = Math.cos(heading), sz = -Math.sin(heading);
+      carPos.x += fx * speed * dt + sx * lateralVel * dt;
+      carPos.z += fz * speed * dt + sz * lateralVel * dt;
 
       // Wall collision: push back inside, lose speed
       const ct2 = closestT(carPos);
