@@ -900,6 +900,354 @@ export default function RacingGame() {
       scene.add(stand);
     }
 
+    // ===== Trackside atmosphere: marshals, crowd, photographers, sparks, chopper =====
+    {
+      const NEON = [0xff1493, 0x22d3ee, 0xa855f7, 0xff6a1a, 0x22c55e, 0xffd166];
+
+      // --- Marshal posts (figure + waving flag) ---
+      type Marshal = { flag: THREE.Mesh; arm: THREE.Group; phase: number; mat: THREE.MeshBasicMaterial };
+      const marshals: Marshal[] = [];
+      const flagGeo = new THREE.PlaneGeometry(1.6, 1.0, 6, 1);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff8800, emissive: 0x331100, emissiveIntensity: 0.4, roughness: 0.6 });
+      const headMat = new THREE.MeshStandardMaterial({ color: 0xffe0bd, roughness: 0.7 });
+      const MARSHAL_COUNT = 10;
+      for (let i = 0; i < MARSHAL_COUNT; i++) {
+        const t = (i / MARSHAL_COUNT + 0.015) % 1;
+        const p = curve.getPointAt(t);
+        const tg = curve.getTangentAt(t).normalize();
+        const n = new THREE.Vector3(-tg.z, 0, tg.x);
+        const side = i % 2 === 0 ? 1 : -1;
+        const pos = p.clone().addScaledVector(n, side * (TRACK_WIDTH / 2 + 4.5));
+        const grp = new THREE.Group();
+        grp.position.set(pos.x, 0, pos.z);
+        grp.lookAt(p.x, 0, p.z);
+        // Post platform
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(2.2, 0.2, 1.6),
+          new THREE.MeshStandardMaterial({ color: 0x111122, emissive: 0xffcc00, emissiveIntensity: 0.15, roughness: 0.7 }),
+        );
+        post.position.y = 0.1;
+        grp.add(post);
+        // Body
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.8, 0.3), bodyMat);
+        torso.position.set(-0.3, 0.7, 0); torso.castShadow = true; grp.add(torso);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), headMat);
+        head.position.set(-0.3, 1.25, 0); grp.add(head);
+        const legs = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.65, 0.25), new THREE.MeshStandardMaterial({ color: 0x1a1a1a }));
+        legs.position.set(-0.3, 0.32, 0); grp.add(legs);
+        // Arm + flag (yellow most of the time; chequered marshal at i==0)
+        const arm = new THREE.Group();
+        arm.position.set(-0.1, 1.05, 0);
+        grp.add(arm);
+        const armMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), bodyMat);
+        armMesh.position.set(0.35, 0, 0); armMesh.rotation.z = -Math.PI / 2;
+        arm.add(armMesh);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 6), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
+        pole.position.set(0.7, 0.6, 0);
+        arm.add(pole);
+        const checker = i === 0;
+        const flagMat = new THREE.MeshBasicMaterial({
+          color: checker ? 0xffffff : 0xffd60a,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.95,
+        });
+        const flag = new THREE.Mesh(flagGeo, flagMat);
+        flag.position.set(1.5, 1.0, 0);
+        arm.add(flag);
+        scene.add(grp);
+        marshals.push({ flag, arm, phase: Math.random() * Math.PI * 2, mat: flagMat });
+      }
+      envUpdaters.push((tt) => {
+        for (const m of marshals) {
+          // wave flag (wind + arm motion)
+          m.arm.rotation.z = Math.sin(tt * 0.004 + m.phase) * 0.35;
+          const posAttr = m.flag.geometry.attributes.position as THREE.BufferAttribute;
+          for (let i = 0; i < posAttr.count; i++) {
+            const x = posAttr.getX(i);
+            posAttr.setZ(i, Math.sin(tt * 0.008 + x * 1.8 + m.phase) * 0.18 * (x + 0.8));
+          }
+          posAttr.needsUpdate = true;
+        }
+      });
+
+      // --- Crowd in grandstands (instanced) ---
+      const crowdGeo = new THREE.BoxGeometry(0.5, 0.9, 0.4);
+      const crowdMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: false, roughness: 0.9 });
+      const CROWD = 14 * 60; // 14 stands * 60 spectators
+      const crowd = new THREE.InstancedMesh(crowdGeo, crowdMat, CROWD);
+      crowd.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CROWD * 3), 3);
+      const cdummy = new THREE.Object3D();
+      const ccol = new THREE.Color();
+      const crowdBaseY: number[] = [];
+      let ci = 0;
+      for (let s = 0; s < 14; s++) {
+        const tt = s / 14;
+        const p = curve.getPointAt(tt);
+        const tg = curve.getTangentAt(tt).normalize();
+        const n = new THREE.Vector3(-tg.z, 0, tg.x);
+        const standPos = p.clone().addScaledVector(n, -(TRACK_WIDTH / 2 + 28));
+        const right = new THREE.Vector3(tg.x, 0, tg.z);
+        for (let r = 0; r < 6; r++) {
+          for (let c2 = 0; c2 < 10; c2++) {
+            const ox = (c2 - 4.5) * 3.2;
+            const oy = 1.2 + r * 1.3;
+            const oz = -2 + r * 0.6;
+            const wp = standPos.clone()
+              .addScaledVector(right, ox)
+              .addScaledVector(n, oz);
+            cdummy.position.set(wp.x, oy, wp.z);
+            cdummy.rotation.y = Math.atan2(p.x - wp.x, p.z - wp.z);
+            cdummy.scale.set(1, 1, 1);
+            cdummy.updateMatrix();
+            crowd.setMatrixAt(ci, cdummy.matrix);
+            ccol.setHex(NEON[(Math.random() * NEON.length) | 0]);
+            crowd.setColorAt(ci, ccol);
+            crowdBaseY.push(oy);
+            ci++;
+          }
+        }
+      }
+      crowd.instanceMatrix.needsUpdate = true;
+      // Use vertex colors via setColorAt
+      crowdMat.onBeforeCompile = () => {};
+      scene.add(crowd);
+      const tmpMat = new THREE.Matrix4();
+      const tmpPos = new THREE.Vector3();
+      const tmpQuat = new THREE.Quaternion();
+      const tmpScale = new THREE.Vector3();
+      envUpdaters.push((tt) => {
+        // Subtle bob — update only every other frame to save CPU
+        if ((((tt * 0.06) | 0) & 1) === 0) return;
+        for (let i = 0; i < CROWD; i += 3) {
+          crowd.getMatrixAt(i, tmpMat);
+          tmpMat.decompose(tmpPos, tmpQuat, tmpScale);
+          tmpPos.y = crowdBaseY[i] + Math.sin(tt * 0.006 + i) * 0.12;
+          tmpMat.compose(tmpPos, tmpQuat, tmpScale);
+          crowd.setMatrixAt(i, tmpMat);
+        }
+        crowd.instanceMatrix.needsUpdate = true;
+      });
+
+      // --- Camera flashes from crowd ---
+      const flashGeo = new THREE.SphereGeometry(0.7, 6, 6);
+      const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+      const FLASHES = 18;
+      const flashes: { mesh: THREE.Mesh; t: number; life: number }[] = [];
+      for (let i = 0; i < FLASHES; i++) {
+        const m = new THREE.Mesh(flashGeo, flashMat.clone());
+        const stand = (Math.random() * 14) | 0;
+        const tt = stand / 14;
+        const p = curve.getPointAt(tt);
+        const tg = curve.getTangentAt(tt).normalize();
+        const n = new THREE.Vector3(-tg.z, 0, tg.x);
+        const pos = p.clone().addScaledVector(n, -(TRACK_WIDTH / 2 + 26));
+        m.position.set(pos.x + (Math.random() - 0.5) * 28, 4 + Math.random() * 6, pos.z + (Math.random() - 0.5) * 6);
+        scene.add(m);
+        flashes.push({ mesh: m, t: Math.random() * 4000, life: 0 });
+      }
+      envUpdaters.push((tt) => {
+        for (const f of flashes) {
+          if (tt > f.t) {
+            f.life = 120;
+            f.t = tt + 600 + Math.random() * 4000;
+          }
+          const mat = f.mesh.material as THREE.MeshBasicMaterial;
+          if (f.life > 0) {
+            mat.opacity = f.life / 120;
+            f.life -= 16;
+          } else {
+            mat.opacity = 0;
+          }
+        }
+      });
+
+      // --- Photographers (trackside, with occasional flash) ---
+      type Photog = { flash: THREE.Mesh; mat: THREE.MeshBasicMaterial; next: number };
+      const photogs: Photog[] = [];
+      for (let i = 0; i < 8; i++) {
+        const tt = (i / 8 + 0.06) % 1;
+        const p = curve.getPointAt(tt);
+        const tg = curve.getTangentAt(tt).normalize();
+        const n = new THREE.Vector3(-tg.z, 0, tg.x);
+        const side = i % 2 === 0 ? 1 : -1;
+        const pos = p.clone().addScaledVector(n, side * (TRACK_WIDTH / 2 + 3.2));
+        const g = new THREE.Group();
+        g.position.set(pos.x, 0, pos.z);
+        g.lookAt(p.x, 1, p.z);
+        const vest = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.3), new THREE.MeshStandardMaterial({ color: 0xffe600, emissive: 0x222200 }));
+        vest.position.y = 0.7; g.add(vest);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), headMat);
+        head.position.y = 1.25; g.add(head);
+        const cam = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.5), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+        cam.position.set(0, 1.15, 0.35); g.add(cam);
+        const fmat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+        const flash = new THREE.Mesh(new THREE.SphereGeometry(0.4, 6, 6), fmat);
+        flash.position.set(0, 1.15, 0.7);
+        g.add(flash);
+        scene.add(g);
+        photogs.push({ flash, mat: fmat, next: Math.random() * 5000 });
+      }
+      envUpdaters.push((tt) => {
+        for (const ph of photogs) {
+          if (tt > ph.next) {
+            ph.mat.opacity = 1;
+            ph.next = tt + 1500 + Math.random() * 5000;
+          } else {
+            ph.mat.opacity *= 0.85;
+          }
+        }
+      });
+
+      // --- Helicopter + spotlight circling overhead ---
+      const heliGroup = new THREE.Group();
+      const heliBody = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.9, 2.2, 4, 8),
+        new THREE.MeshStandardMaterial({ color: 0x111122, emissive: 0xff2222, emissiveIntensity: 0.6, roughness: 0.5, metalness: 0.6 }),
+      );
+      heliBody.rotation.z = Math.PI / 2;
+      heliGroup.add(heliBody);
+      const tail = new THREE.Mesh(
+        new THREE.BoxGeometry(2.6, 0.25, 0.25),
+        new THREE.MeshStandardMaterial({ color: 0x111122 }),
+      );
+      tail.position.set(-1.8, 0, 0);
+      heliGroup.add(tail);
+      const rotor = new THREE.Mesh(
+        new THREE.BoxGeometry(5.6, 0.05, 0.2),
+        new THREE.MeshStandardMaterial({ color: 0x222222, transparent: true, opacity: 0.6 }),
+      );
+      rotor.position.y = 0.6;
+      heliGroup.add(rotor);
+      const heliBeam = new THREE.SpotLight(0xffffff, 2.5, 240, Math.PI / 12, 0.5, 1);
+      heliBeam.position.set(0, -0.5, 0);
+      const heliTarget = new THREE.Object3D();
+      heliGroup.add(heliBeam, heliTarget);
+      heliBeam.target = heliTarget;
+      heliGroup.position.set(0, 80, 0);
+      scene.add(heliGroup);
+      envUpdaters.push((tt) => {
+        const ang = tt * 0.00025;
+        const r = 220;
+        const x = Math.cos(ang) * r;
+        const z = Math.sin(ang) * r;
+        heliGroup.position.set(x, 70 + Math.sin(tt * 0.0008) * 4, z);
+        heliGroup.rotation.y = -ang + Math.PI / 2;
+        rotor.rotation.y += 0.6;
+        heliTarget.position.set(-x * 0.2, -70, -z * 0.2);
+      });
+
+      // --- Flashing warning lights at hazard zones ---
+      const warnGroups: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; phase: number }[] = [];
+      for (let i = 0; i < 6; i++) {
+        const tt = (i / 6 + 0.5 / 6) % 1;
+        const p = curve.getPointAt(tt);
+        const tg = curve.getTangentAt(tt).normalize();
+        const n = new THREE.Vector3(-tg.z, 0, tg.x);
+        for (const side of [-1, 1]) {
+          const pos = p.clone().addScaledVector(n, side * (TRACK_WIDTH / 2 + 2.5));
+          const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9 });
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), mat);
+          m.position.set(pos.x, 2.2, pos.z);
+          scene.add(m);
+          warnGroups.push({ mesh: m, mat, phase: Math.random() * Math.PI * 2 });
+        }
+      }
+      envUpdaters.push((tt) => {
+        for (const w of warnGroups) {
+          w.mat.opacity = 0.25 + (Math.sin(tt * 0.012 + w.phase) * 0.5 + 0.5) * 0.7;
+        }
+      });
+
+      // --- Ambient sparks pool (random trackside emissions) ---
+      const SPARK_COUNT = 200;
+      const sparkGeo = new THREE.BufferGeometry();
+      const sparkPos = new Float32Array(SPARK_COUNT * 3);
+      const sparkVel = new Float32Array(SPARK_COUNT * 3);
+      const sparkLife = new Float32Array(SPARK_COUNT);
+      for (let i = 0; i < SPARK_COUNT; i++) sparkLife[i] = 0;
+      sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPos, 3));
+      const sparkPoints = new THREE.Points(
+        sparkGeo,
+        new THREE.PointsMaterial({ size: 0.6, color: 0xffcc66, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false }),
+      );
+      scene.add(sparkPoints);
+      let sparkCursor = 0;
+      let nextSparkBurst = 0;
+      envUpdaters.push((tt) => {
+        // Emit a burst near a random track location occasionally
+        if (tt > nextSparkBurst) {
+          nextSparkBurst = tt + 200 + Math.random() * 1200;
+          const t0 = Math.random();
+          const p = curve.getPointAt(t0);
+          const tg = curve.getTangentAt(t0).normalize();
+          const n = new THREE.Vector3(-tg.z, 0, tg.x);
+          const side = Math.random() < 0.5 ? 1 : -1;
+          const ep = p.clone().addScaledVector(n, side * (TRACK_WIDTH / 2 - 0.5));
+          for (let k = 0; k < 14; k++) {
+            const i = sparkCursor;
+            sparkPos[i * 3] = ep.x;
+            sparkPos[i * 3 + 1] = 0.4;
+            sparkPos[i * 3 + 2] = ep.z;
+            sparkVel[i * 3] = (Math.random() - 0.5) * 0.6 - tg.x * 0.4;
+            sparkVel[i * 3 + 1] = Math.random() * 0.4 + 0.1;
+            sparkVel[i * 3 + 2] = (Math.random() - 0.5) * 0.6 - tg.z * 0.4;
+            sparkLife[i] = 1;
+            sparkCursor = (sparkCursor + 1) % SPARK_COUNT;
+          }
+        }
+        // Integrate
+        for (let i = 0; i < SPARK_COUNT; i++) {
+          if (sparkLife[i] <= 0) continue;
+          sparkPos[i * 3] += sparkVel[i * 3];
+          sparkPos[i * 3 + 1] += sparkVel[i * 3 + 1];
+          sparkPos[i * 3 + 2] += sparkVel[i * 3 + 2];
+          sparkVel[i * 3 + 1] -= 0.03;
+          sparkLife[i] -= 0.04;
+          if (sparkPos[i * 3 + 1] < 0.05) sparkLife[i] = 0;
+        }
+        sparkGeo.attributes.position.needsUpdate = true;
+      });
+
+      // --- Trackside banner flags on poles (wind) ---
+      type Banner = { mesh: THREE.Mesh; phase: number };
+      const banners: Banner[] = [];
+      const banGeo = new THREE.PlaneGeometry(2.2, 1.2, 6, 1);
+      for (let i = 0; i < 18; i++) {
+        const tt = (i / 18) % 1;
+        const p = curve.getPointAt(tt);
+        const tg = curve.getTangentAt(tt).normalize();
+        const n = new THREE.Vector3(-tg.z, 0, tg.x);
+        const side = i % 2 === 0 ? 1 : -1;
+        const pos = p.clone().addScaledVector(n, side * (TRACK_WIDTH / 2 + 7));
+        const pole = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.05, 0.05, 6, 6),
+          new THREE.MeshStandardMaterial({ color: 0x888888 }),
+        );
+        pole.position.set(pos.x, 3, pos.z);
+        scene.add(pole);
+        const col = NEON[i % NEON.length];
+        const ban = new THREE.Mesh(
+          banGeo,
+          new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
+        );
+        ban.position.set(pos.x + tg.x * 1.2, 5.0, pos.z + tg.z * 1.2);
+        ban.lookAt(p.x, 5.0, p.z);
+        scene.add(ban);
+        banners.push({ mesh: ban, phase: Math.random() * Math.PI * 2 });
+      }
+      envUpdaters.push((tt) => {
+        for (const b of banners) {
+          const posAttr = b.mesh.geometry.attributes.position as THREE.BufferAttribute;
+          for (let i = 0; i < posAttr.count; i++) {
+            const x = posAttr.getX(i);
+            posAttr.setZ(i, Math.sin(tt * 0.006 + x * 1.4 + b.phase) * 0.22 * (x + 1.1));
+          }
+          posAttr.needsUpdate = true;
+        }
+      });
+    }
+
     // ===== Futuristic city skyline (instanced for perf) =====
     const NEON_COLORS = [0xff1493, 0x22d3ee, 0xa855f7, 0xff6a1a, 0x22c55e, 0xffd166];
     const bldGeo = new THREE.BoxGeometry(1, 1, 1);
