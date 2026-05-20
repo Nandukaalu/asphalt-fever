@@ -2169,6 +2169,10 @@ export default function RacingGame() {
           speed *= 0.78;
           lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
           ai.speed = AI_SPEED * 0.85;
+          if (now - lastPlayerCrashAt > 1200) {
+            playerCrashes += 1;
+            lastPlayerCrashAt = now;
+          }
         } else {
           ai.speed += (AI_SPEED - ai.speed) * Math.min(1, dt * 0.5);
         }
@@ -2219,6 +2223,10 @@ export default function RacingGame() {
             carPos.x += nx * overlap;
             carPos.z += nz * overlap;
             speed *= 0.78;
+            if (now - lastPlayerCrashAt > 1200) {
+              playerCrashes += 1;
+              lastPlayerCrashAt = now;
+            }
           }
         });
         stale.forEach((id) => { remotesRef.current.delete(id); disposeRemoteCar(id); });
