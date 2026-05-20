@@ -3489,7 +3489,7 @@ function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTrack
 }
 
 function ResultScreen({ result, driver, track, mode, career, classification, fastestLapId, onPodium, onMenu, onAgain, onReplay, canReplay }: {
-  result: { position: number; bestLap: number; points: number };
+  result: { position: number; bestLap: number; points: number; credits: number; crashes: number; crashPenaltyS: number };
   driver: Driver;
   track: TrackDef;
   mode: Mode;
