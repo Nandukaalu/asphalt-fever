@@ -2075,6 +2075,11 @@ export default function RacingGame() {
         const impact = Math.min(1, Math.abs(speed) / MAX_SPEED);
         speed *= 0.88 - impact * 0.05;
         lateralVel *= -0.25;
+        // Count this as a crash if we're going fast enough and we haven't just counted one
+        if (impact > 0.35 && now - lastWallCrashAt > 1200) {
+          wallCrashes += 1;
+          lastWallCrashAt = now;
+        }
         // Sparks while scraping
         for (let s = 0; s < 4; s++) {
           spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
@@ -2093,6 +2098,7 @@ export default function RacingGame() {
           c.mesh.rotation.x = Math.PI / 3;
           c.mesh.position.y = 0.2;
           speed *= 0.9;
+          coneHits += 1;
         }
       }
 
