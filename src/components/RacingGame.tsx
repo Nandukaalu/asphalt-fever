@@ -1785,6 +1785,11 @@ export default function RacingGame() {
     let bodyRoll = 0;         // visual roll (cornering)
     let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
 
+    // Crash tracking (time penalty + credit deductions)
+    let wallCrashes = 0;
+    let coneHits = 0;
+    let lastWallCrashAt = 0;
+
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
     setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0);
