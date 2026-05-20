@@ -2399,7 +2399,8 @@ export default function RacingGame() {
         rows.push({
           id: driver.id, name: playerName || driver.name, team: driver.team,
           color: toHex(driver.primary), number: driver.number,
-          progress: raceProgress, lap: Math.min(lap, totalLaps),
+          progress: raceProgress - (playerCrashes * 3) / lapTimeEst,
+          lap: Math.min(lap, totalLaps),
           lastLap: undefined, bestLap: bestLap > 0 ? bestLap : undefined,
           isPlayer: true,
         });
