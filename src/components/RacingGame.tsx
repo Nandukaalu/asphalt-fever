@@ -1785,10 +1785,9 @@ export default function RacingGame() {
     let bodyRoll = 0;         // visual roll (cornering)
     let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
 
-    // Crash tracking (time penalty + credit deductions)
-    let wallCrashes = 0;
-    let coneHits = 0;
-    let lastWallCrashAt = 0;
+    // Crash tracking — only collisions with other drivers count
+    let playerCrashes = 0;
+    let lastPlayerCrashAt = 0;
 
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
@@ -2075,11 +2074,6 @@ export default function RacingGame() {
         const impact = Math.min(1, Math.abs(speed) / MAX_SPEED);
         speed *= 0.88 - impact * 0.05;
         lateralVel *= -0.25;
-        // Count this as a crash if we're going fast enough and we haven't just counted one
-        if (impact > 0.35 && now - lastWallCrashAt > 1200) {
-          wallCrashes += 1;
-          lastWallCrashAt = now;
-        }
         // Sparks while scraping
         for (let s = 0; s < 4; s++) {
           spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
@@ -2098,7 +2092,6 @@ export default function RacingGame() {
           c.mesh.rotation.x = Math.PI / 3;
           c.mesh.position.y = 0.2;
           speed *= 0.9;
-          coneHits += 1;
         }
       }
 
