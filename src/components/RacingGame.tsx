@@ -2255,15 +2255,18 @@ export default function RacingGame() {
       // Position calc — sort all cars by total progress
       let position = 1;
       const playerLapFrac = raceProgress % 1;
+      // Apply live crash time penalty so position updates instantly on contact
+      const livePenaltyS = playerCrashes * 3;
+      const effectiveProgress = raceProgress - (livePenaltyS / lapTimeEst);
       if (isMulti) {
         remotesRef.current.forEach((rp) => {
-          if (rp.progress > raceProgress) position++;
+          if (rp.progress > effectiveProgress) position++;
         });
       } else {
         ais.forEach((ai) => {
           const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
           const aiProg = aiLapEst + ai.t;
-          if (aiProg > raceProgress) position++;
+          if (aiProg > effectiveProgress) position++;
         });
       }
 
