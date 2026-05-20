@@ -3516,6 +3516,16 @@ function ResultScreen({ result, driver, track, mode, career, classification, fas
           <div className="text-[10px] text-white/60 uppercase tracking-widest">Points</div>
           <div className="text-lg font-bold text-red-400">+{result.points}</div>
         </div>
+        <div>
+          <div className="text-[10px] text-white/60 uppercase tracking-widest">Credits</div>
+          <div className="text-lg font-bold text-yellow-300">+{result.credits.toLocaleString()} CR</div>
+        </div>
+        {result.crashes > 0 && (
+          <div>
+            <div className="text-[10px] text-white/60 uppercase tracking-widest">Crash Penalty</div>
+            <div className="text-lg font-bold text-orange-400">+{result.crashPenaltyS.toFixed(1)}s</div>
+          </div>
+        )}
         {mode === "career" && career && (
           <div>
             <div className="text-[10px] text-white/60 uppercase tracking-widest">Career</div>
