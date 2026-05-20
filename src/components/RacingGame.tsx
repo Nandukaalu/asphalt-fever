@@ -378,7 +378,7 @@ export default function RacingGame() {
   const [weatherId, setWeatherId] = useState<WeatherId>(() => loadWeather());
   useEffect(() => { try { localStorage.setItem(WEATHER_KEY, weatherId); } catch {} }, [weatherId]);
   const [career, setCareer] = useState<CareerSave | null>(null);
-  const [result, setResult] = useState<{ position: number; bestLap: number; points: number } | null>(null);
+  const [result, setResult] = useState<{ position: number; bestLap: number; points: number; credits: number; crashes: number; crashPenaltyS: number } | null>(null);
   const [classification, setClassification] = useState<PodiumEntry[]>([]);
   const [fastestLapId, setFastestLapId] = useState<string | undefined>(undefined);
   const [showPodium, setShowPodium] = useState(false);
@@ -1785,6 +1785,11 @@ export default function RacingGame() {
     let bodyRoll = 0;         // visual roll (cornering)
     let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
 
+    // Crash tracking (time penalty + credit deductions)
+    let wallCrashes = 0;
+    let coneHits = 0;
+    let lastWallCrashAt = 0;
+
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
     setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0);
@@ -2070,6 +2075,11 @@ export default function RacingGame() {
         const impact = Math.min(1, Math.abs(speed) / MAX_SPEED);
         speed *= 0.88 - impact * 0.05;
         lateralVel *= -0.25;
+        // Count this as a crash if we're going fast enough and we haven't just counted one
+        if (impact > 0.35 && now - lastWallCrashAt > 1200) {
+          wallCrashes += 1;
+          lastWallCrashAt = now;
+        }
         // Sparks while scraping
         for (let s = 0; s < 4; s++) {
           spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
@@ -2088,6 +2098,7 @@ export default function RacingGame() {
           c.mesh.rotation.x = Math.PI / 3;
           c.mesh.position.y = 0.2;
           speed *= 0.9;
+          coneHits += 1;
         }
       }
 
@@ -2480,10 +2491,14 @@ export default function RacingGame() {
 
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+        // Crash time penalty: 2s per wall crash, 0.5s per cone hit
+        const WALL_PENALTY_S = 2;
+        const CONE_PENALTY_S = 0.5;
+        const crashPenaltyS = wallCrashes * WALL_PENALTY_S + coneHits * CONE_PENALTY_S;
         // Pit-stop penalty: +5s per missed mandatory stop, applied to position
         const missed = Math.max(0, requiredStops - pitStopsRef.current);
         const PIT_PENALTY_S = 5;
-        const penaltyS = missed * PIT_PENALTY_S;
+        const penaltyS = missed * PIT_PENALTY_S + crashPenaltyS;
         let adjustedPosition = position;
         if (penaltyS > 0) {
           // Re-score by subtracting penalty-equivalent progress from player
@@ -2499,6 +2514,19 @@ export default function RacingGame() {
           adjustedPosition = Math.min(10, position + dropped);
         }
         const points = POINTS[adjustedPosition - 1] ?? 0;
+        // Credit reward (used in /garage). Base by finishing position, bonus for podium/win,
+        // minus a small deduction per crash. Always at least a participation reward.
+        const POS_CREDITS = [1200, 900, 700, 550, 450, 400, 350, 300, 250, 200];
+        const baseCredits = POS_CREDITS[adjustedPosition - 1] ?? 150;
+        const winBonus = adjustedPosition === 1 ? 500 : adjustedPosition <= 3 ? 200 : 0;
+        const crashDeduction = wallCrashes * 75 + coneHits * 15;
+        const creditsEarned = Math.max(50, Math.round(baseCredits + winBonus - crashDeduction));
+        try {
+          const raw = localStorage.getItem("af-wallet-v1");
+          const cur = raw ? JSON.parse(raw) : { credits: 0 };
+          const next = { ...cur, credits: (Number(cur.credits) || 0) + creditsEarned };
+          localStorage.setItem("af-wallet-v1", JSON.stringify(next));
+        } catch {}
         // Record daily-challenge progress for this race
         const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000) + penaltyS;
         try {
@@ -2540,7 +2568,7 @@ export default function RacingGame() {
         }
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
-        setResult({ position: adjustedPosition, bestLap, points });
+        setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned, crashes: wallCrashes + coneHits, crashPenaltyS });
         // Build full classification (positions, names, points, best laps) and detect fastest lap
         {
           const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
@@ -3461,7 +3489,7 @@ function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTrack
 }
 
 function ResultScreen({ result, driver, track, mode, career, classification, fastestLapId, onPodium, onMenu, onAgain, onReplay, canReplay }: {
-  result: { position: number; bestLap: number; points: number };
+  result: { position: number; bestLap: number; points: number; credits: number; crashes: number; crashPenaltyS: number };
   driver: Driver;
   track: TrackDef;
   mode: Mode;
@@ -3488,6 +3516,16 @@ function ResultScreen({ result, driver, track, mode, career, classification, fas
           <div className="text-[10px] text-white/60 uppercase tracking-widest">Points</div>
           <div className="text-lg font-bold text-red-400">+{result.points}</div>
         </div>
+        <div>
+          <div className="text-[10px] text-white/60 uppercase tracking-widest">Credits</div>
+          <div className="text-lg font-bold text-yellow-300">+{result.credits.toLocaleString()} CR</div>
+        </div>
+        {result.crashes > 0 && (
+          <div>
+            <div className="text-[10px] text-white/60 uppercase tracking-widest">Crash Penalty</div>
+            <div className="text-lg font-bold text-orange-400">+{result.crashPenaltyS.toFixed(1)}s</div>
+          </div>
+        )}
         {mode === "career" && career && (
           <div>
             <div className="text-[10px] text-white/60 uppercase tracking-widest">Career</div>
