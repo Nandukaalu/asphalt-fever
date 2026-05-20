@@ -2491,10 +2491,14 @@ export default function RacingGame() {
 
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+        // Crash time penalty: 2s per wall crash, 0.5s per cone hit
+        const WALL_PENALTY_S = 2;
+        const CONE_PENALTY_S = 0.5;
+        const crashPenaltyS = wallCrashes * WALL_PENALTY_S + coneHits * CONE_PENALTY_S;
         // Pit-stop penalty: +5s per missed mandatory stop, applied to position
         const missed = Math.max(0, requiredStops - pitStopsRef.current);
         const PIT_PENALTY_S = 5;
-        const penaltyS = missed * PIT_PENALTY_S;
+        const penaltyS = missed * PIT_PENALTY_S + crashPenaltyS;
         let adjustedPosition = position;
         if (penaltyS > 0) {
           // Re-score by subtracting penalty-equivalent progress from player
@@ -2510,6 +2514,19 @@ export default function RacingGame() {
           adjustedPosition = Math.min(10, position + dropped);
         }
         const points = POINTS[adjustedPosition - 1] ?? 0;
+        // Credit reward (used in /garage). Base by finishing position, bonus for podium/win,
+        // minus a small deduction per crash. Always at least a participation reward.
+        const POS_CREDITS = [1200, 900, 700, 550, 450, 400, 350, 300, 250, 200];
+        const baseCredits = POS_CREDITS[adjustedPosition - 1] ?? 150;
+        const winBonus = adjustedPosition === 1 ? 500 : adjustedPosition <= 3 ? 200 : 0;
+        const crashDeduction = wallCrashes * 75 + coneHits * 15;
+        const creditsEarned = Math.max(50, Math.round(baseCredits + winBonus - crashDeduction));
+        try {
+          const raw = localStorage.getItem("af-wallet-v1");
+          const cur = raw ? JSON.parse(raw) : { credits: 0 };
+          const next = { ...cur, credits: (Number(cur.credits) || 0) + creditsEarned };
+          localStorage.setItem("af-wallet-v1", JSON.stringify(next));
+        } catch {}
         // Record daily-challenge progress for this race
         const finalRaceTime = Math.max(0, (now - raceStartAt) / 1000) + penaltyS;
         try {
@@ -2551,7 +2568,7 @@ export default function RacingGame() {
         }
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
-        setResult({ position: adjustedPosition, bestLap, points });
+        setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned, crashes: wallCrashes + coneHits, crashPenaltyS });
         // Build full classification (positions, names, points, best laps) and detect fastest lap
         {
           const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
