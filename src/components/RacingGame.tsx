@@ -1785,10 +1785,9 @@ export default function RacingGame() {
     let bodyRoll = 0;         // visual roll (cornering)
     let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
 
-    // Crash tracking (time penalty + credit deductions)
-    let wallCrashes = 0;
-    let coneHits = 0;
-    let lastWallCrashAt = 0;
+    // Crash tracking — only collisions with other drivers count
+    let playerCrashes = 0;
+    let lastPlayerCrashAt = 0;
 
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
@@ -2075,11 +2074,6 @@ export default function RacingGame() {
         const impact = Math.min(1, Math.abs(speed) / MAX_SPEED);
         speed *= 0.88 - impact * 0.05;
         lateralVel *= -0.25;
-        // Count this as a crash if we're going fast enough and we haven't just counted one
-        if (impact > 0.35 && now - lastWallCrashAt > 1200) {
-          wallCrashes += 1;
-          lastWallCrashAt = now;
-        }
         // Sparks while scraping
         for (let s = 0; s < 4; s++) {
           spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
@@ -2098,7 +2092,6 @@ export default function RacingGame() {
           c.mesh.rotation.x = Math.PI / 3;
           c.mesh.position.y = 0.2;
           speed *= 0.9;
-          coneHits += 1;
         }
       }
 
@@ -2176,6 +2169,10 @@ export default function RacingGame() {
           speed *= 0.78;
           lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
           ai.speed = AI_SPEED * 0.85;
+          if (now - lastPlayerCrashAt > 1200) {
+            playerCrashes += 1;
+            lastPlayerCrashAt = now;
+          }
         } else {
           ai.speed += (AI_SPEED - ai.speed) * Math.min(1, dt * 0.5);
         }
@@ -2226,6 +2223,10 @@ export default function RacingGame() {
             carPos.x += nx * overlap;
             carPos.z += nz * overlap;
             speed *= 0.78;
+            if (now - lastPlayerCrashAt > 1200) {
+              playerCrashes += 1;
+              lastPlayerCrashAt = now;
+            }
           }
         });
         stale.forEach((id) => { remotesRef.current.delete(id); disposeRemoteCar(id); });
@@ -2491,10 +2492,9 @@ export default function RacingGame() {
 
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-        // Crash time penalty: 2s per wall crash, 0.5s per cone hit
-        const WALL_PENALTY_S = 2;
-        const CONE_PENALTY_S = 0.5;
-        const crashPenaltyS = wallCrashes * WALL_PENALTY_S + coneHits * CONE_PENALTY_S;
+        // Crash time penalty: collisions with other drivers
+        const PLAYER_CRASH_PENALTY_S = 3;
+        const crashPenaltyS = playerCrashes * PLAYER_CRASH_PENALTY_S;
         // Pit-stop penalty: +5s per missed mandatory stop, applied to position
         const missed = Math.max(0, requiredStops - pitStopsRef.current);
         const PIT_PENALTY_S = 5;
@@ -2519,7 +2519,7 @@ export default function RacingGame() {
         const POS_CREDITS = [1200, 900, 700, 550, 450, 400, 350, 300, 250, 200];
         const baseCredits = POS_CREDITS[adjustedPosition - 1] ?? 150;
         const winBonus = adjustedPosition === 1 ? 500 : adjustedPosition <= 3 ? 200 : 0;
-        const crashDeduction = wallCrashes * 75 + coneHits * 15;
+        const crashDeduction = playerCrashes * 100;
         const creditsEarned = Math.max(50, Math.round(baseCredits + winBonus - crashDeduction));
         try {
           const raw = localStorage.getItem("af-wallet-v1");
@@ -2568,7 +2568,7 @@ export default function RacingGame() {
         }
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
-        setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned, crashes: wallCrashes + coneHits, crashPenaltyS });
+        setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned, crashes: playerCrashes, crashPenaltyS });
         // Build full classification (positions, names, points, best laps) and detect fastest lap
         {
           const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
