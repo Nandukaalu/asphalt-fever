@@ -2507,6 +2507,7 @@ export default function RacingGame() {
         const baseCredits = POS_CREDITS[adjustedPosition - 1] ?? 150;
         const winBonus = adjustedPosition === 1 ? 500 : adjustedPosition <= 3 ? 200 : 0;
         const creditsEarned = Math.max(50, Math.round(baseCredits + winBonus));
+        try {
           const raw = localStorage.getItem("af-wallet-v1");
           const cur = raw ? JSON.parse(raw) : { credits: 0 };
           const next = { ...cur, credits: (Number(cur.credits) || 0) + creditsEarned };
