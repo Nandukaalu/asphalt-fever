@@ -378,7 +378,7 @@ export default function RacingGame() {
   const [weatherId, setWeatherId] = useState<WeatherId>(() => loadWeather());
   useEffect(() => { try { localStorage.setItem(WEATHER_KEY, weatherId); } catch {} }, [weatherId]);
   const [career, setCareer] = useState<CareerSave | null>(null);
-  const [result, setResult] = useState<{ position: number; bestLap: number; points: number; credits: number; crashes: number; crashPenaltyS: number } | null>(null);
+  const [result, setResult] = useState<{ position: number; bestLap: number; points: number; credits: number } | null>(null);
   const [classification, setClassification] = useState<PodiumEntry[]>([]);
   const [fastestLapId, setFastestLapId] = useState<string | undefined>(undefined);
   const [showPodium, setShowPodium] = useState(false);
@@ -1785,9 +1785,6 @@ export default function RacingGame() {
     let bodyRoll = 0;         // visual roll (cornering)
     let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
 
-    // Crash tracking — only collisions with other drivers count
-    let playerCrashes = 0;
-    let lastPlayerCrashAt = 0;
 
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
@@ -2169,10 +2166,6 @@ export default function RacingGame() {
           speed *= 0.78;
           lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
           ai.speed = AI_SPEED * 0.85;
-          if (now - lastPlayerCrashAt > 1200) {
-            playerCrashes += 1;
-            lastPlayerCrashAt = now;
-          }
         } else {
           ai.speed += (AI_SPEED - ai.speed) * Math.min(1, dt * 0.5);
         }
@@ -2223,10 +2216,6 @@ export default function RacingGame() {
             carPos.x += nx * overlap;
             carPos.z += nz * overlap;
             speed *= 0.78;
-            if (now - lastPlayerCrashAt > 1200) {
-              playerCrashes += 1;
-              lastPlayerCrashAt = now;
-            }
           }
         });
         stale.forEach((id) => { remotesRef.current.delete(id); disposeRemoteCar(id); });
@@ -2255,9 +2244,7 @@ export default function RacingGame() {
       // Position calc — sort all cars by total progress
       let position = 1;
       const playerLapFrac = raceProgress % 1;
-      // Apply live crash time penalty so position updates instantly on contact
-      const livePenaltyS = playerCrashes * 3;
-      const effectiveProgress = raceProgress - (livePenaltyS / lapTimeEst);
+      const effectiveProgress = raceProgress;
       if (isMulti) {
         remotesRef.current.forEach((rp) => {
           if (rp.progress > effectiveProgress) position++;
@@ -2399,7 +2386,7 @@ export default function RacingGame() {
         rows.push({
           id: driver.id, name: playerName || driver.name, team: driver.team,
           color: toHex(driver.primary), number: driver.number,
-          progress: raceProgress - (playerCrashes * 3) / lapTimeEst,
+          progress: raceProgress,
           lap: Math.min(lap, totalLaps),
           lastLap: undefined, bestLap: bestLap > 0 ? bestLap : undefined,
           isPlayer: true,
@@ -2496,13 +2483,10 @@ export default function RacingGame() {
 
       if (raceFinished) {
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
-        // Crash time penalty: collisions with other drivers
-        const PLAYER_CRASH_PENALTY_S = 3;
-        const crashPenaltyS = playerCrashes * PLAYER_CRASH_PENALTY_S;
         // Pit-stop penalty: +5s per missed mandatory stop, applied to position
         const missed = Math.max(0, requiredStops - pitStopsRef.current);
         const PIT_PENALTY_S = 5;
-        const penaltyS = missed * PIT_PENALTY_S + crashPenaltyS;
+        const penaltyS = missed * PIT_PENALTY_S;
         let adjustedPosition = position;
         if (penaltyS > 0) {
           // Re-score by subtracting penalty-equivalent progress from player
@@ -2518,14 +2502,11 @@ export default function RacingGame() {
           adjustedPosition = Math.min(10, position + dropped);
         }
         const points = POINTS[adjustedPosition - 1] ?? 0;
-        // Credit reward (used in /garage). Base by finishing position, bonus for podium/win,
-        // minus a small deduction per crash. Always at least a participation reward.
+        // Credit reward (used in /garage). Base by finishing position, bonus for podium/win.
         const POS_CREDITS = [1200, 900, 700, 550, 450, 400, 350, 300, 250, 200];
         const baseCredits = POS_CREDITS[adjustedPosition - 1] ?? 150;
         const winBonus = adjustedPosition === 1 ? 500 : adjustedPosition <= 3 ? 200 : 0;
-        const crashDeduction = playerCrashes * 100;
-        const creditsEarned = Math.max(50, Math.round(baseCredits + winBonus - crashDeduction));
-        try {
+        const creditsEarned = Math.max(50, Math.round(baseCredits + winBonus));
           const raw = localStorage.getItem("af-wallet-v1");
           const cur = raw ? JSON.parse(raw) : { credits: 0 };
           const next = { ...cur, credits: (Number(cur.credits) || 0) + creditsEarned };
@@ -2572,8 +2553,7 @@ export default function RacingGame() {
         }
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
-        setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned, crashes: playerCrashes, crashPenaltyS });
-        // Build full classification (positions, names, points, best laps) and detect fastest lap
+        setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned });
         {
           const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
           const lapsByDriver = new Map<string, number>();
@@ -3493,7 +3473,7 @@ function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTrack
 }
 
 function ResultScreen({ result, driver, track, mode, career, classification, fastestLapId, onPodium, onMenu, onAgain, onReplay, canReplay }: {
-  result: { position: number; bestLap: number; points: number; credits: number; crashes: number; crashPenaltyS: number };
+  result: { position: number; bestLap: number; points: number; credits: number };
   driver: Driver;
   track: TrackDef;
   mode: Mode;
@@ -3524,13 +3504,6 @@ function ResultScreen({ result, driver, track, mode, career, classification, fas
           <div className="text-[10px] text-white/60 uppercase tracking-widest">Credits</div>
           <div className="text-lg font-bold text-yellow-300">+{result.credits.toLocaleString()} CR</div>
         </div>
-        {result.crashes > 0 && (
-          <div>
-            <div className="text-[10px] text-white/60 uppercase tracking-widest">Crash Penalty</div>
-            <div className="text-lg font-bold text-orange-400">+{result.crashPenaltyS.toFixed(1)}s</div>
-          </div>
-        )}
-        {mode === "career" && career && (
           <div>
             <div className="text-[10px] text-white/60 uppercase tracking-widest">Career</div>
             <div className="text-lg font-bold">{career.points}</div>
