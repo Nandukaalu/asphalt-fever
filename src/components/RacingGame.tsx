@@ -3505,6 +3505,7 @@ function ResultScreen({ result, driver, track, mode, career, classification, fas
           <div className="text-[10px] text-white/60 uppercase tracking-widest">Credits</div>
           <div className="text-lg font-bold text-yellow-300">+{result.credits.toLocaleString()} CR</div>
         </div>
+        {mode === "career" && career && (
           <div>
             <div className="text-[10px] text-white/60 uppercase tracking-widest">Career</div>
             <div className="text-lg font-bold">{career.points}</div>
