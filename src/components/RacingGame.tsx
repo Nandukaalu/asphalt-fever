@@ -571,6 +571,18 @@ export default function RacingGame() {
     const mount = mountRef.current!;
     const width = mount.clientWidth;
     const height = mount.clientHeight;
+    const revertInfiniteGarage = () => {
+      try {
+        const preT = localStorage.getItem("af-tuning-pre-infinite");
+        const preW = localStorage.getItem("af-wallet-pre-infinite");
+        if (preT) localStorage.setItem("af-tuning-v1", preT);
+        if (preW) localStorage.setItem("af-wallet-v1", preW);
+        localStorage.removeItem("af-infinite-credits");
+        localStorage.removeItem("af-infinite-oneshot");
+        localStorage.removeItem("af-tuning-pre-infinite");
+        localStorage.removeItem("af-wallet-pre-infinite");
+      } catch {}
+    };
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
