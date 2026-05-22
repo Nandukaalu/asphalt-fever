@@ -2972,8 +2972,7 @@ export default function RacingGame() {
           {/* PIT button — race only */}
           {sessionMode === "race" && !pitActive && (() => {
             const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
-            if (required === 0) return null;
-            const remaining = Math.max(0, required - pitStops);
+            const remaining = Math.max(0, Math.max(required, 3) - pitStops);
             if (remaining === 0) return null;
             return (
               <button
