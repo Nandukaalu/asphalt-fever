@@ -2074,7 +2074,7 @@ export default function RacingGame() {
           jack.scale.y = 1;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
-          const exit = curve.getPointAt(0.04);
+          const exit = prog < 0.95 ? pitExitPos : trackRejoinPos;
           const k = Math.min(1, dt * 4);
           carPos.x += (exit.x - carPos.x) * k;
           carPos.z += (exit.z - carPos.z) * k;
