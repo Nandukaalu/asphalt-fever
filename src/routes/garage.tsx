@@ -199,6 +199,25 @@ function GaragePage() {
   useEffect(() => { saveJSON(TUNING_KEY, tuning); setSavedAt(Date.now()); }, [tuning]);
   useEffect(() => { saveJSON(WALLET_KEY, wallet); }, [wallet]);
 
+  // Keep garage economy in sync after the one-race infinite-credit boost is reverted on track.
+  useEffect(() => {
+    const syncEconomy = () => {
+      const isInfinite = localStorage.getItem("af-infinite-credits") === "true";
+      infiniteRef.current = isInfinite;
+      setInfiniteMode(isInfinite);
+      setTuning(loadJSON<Tuning>(TUNING_KEY, { engine: 3, turbo: 2, handling: 4, brakes: 3, suspension: 3, tires: "Sport" }));
+      setWallet(loadJSON<Wallet>(WALLET_KEY, { credits: 24500 }));
+    };
+    window.addEventListener("focus", syncEconomy);
+    window.addEventListener("pageshow", syncEconomy);
+    window.addEventListener("storage", syncEconomy);
+    return () => {
+      window.removeEventListener("focus", syncEconomy);
+      window.removeEventListener("pageshow", syncEconomy);
+      window.removeEventListener("storage", syncEconomy);
+    };
+  }, []);
+
   // Infinite credits toggle (Ctrl+Shift+I)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
