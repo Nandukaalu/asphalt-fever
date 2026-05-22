@@ -2085,10 +2085,15 @@ export default function RacingGame() {
           pitActiveRef.current = false;
           setPitActive(false);
           setPitProgress(0);
+          setPitTimeLeft(0);
           setPitRequested(false);
           pitRequestedRef.current = false;
           speed = 8;
+          tireWear = 0;
+          setTyreWearHud(0);
           pitLiftY = 0;
+          carPos.copy(pitExitPos);
+          heading = pitBoxHeading;
           pitCrewGroup.visible = false;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
