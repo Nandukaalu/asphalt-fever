@@ -199,6 +199,21 @@ function GaragePage() {
   useEffect(() => { saveJSON(TUNING_KEY, tuning); setSavedAt(Date.now()); }, [tuning]);
   useEffect(() => { saveJSON(WALLET_KEY, wallet); }, [wallet]);
 
+  // Infinite credits toggle (Ctrl+Shift+I)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        const next = !infiniteRef.current;
+        infiniteRef.current = next;
+        setInfiniteMode(next);
+        try { localStorage.setItem("af-infinite-credits", String(next)); } catch {}
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // showroom auto-rotate
   useEffect(() => {
     if (!showroom) return;
