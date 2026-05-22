@@ -2022,7 +2022,8 @@ export default function RacingGame() {
         speed = 0;
         lateralVel = 0;
         const elapsed = now - pitBoxStart;
-        const prog = Math.min(1, elapsed / PIT_DURATION_MS);
+        const prog = Math.min(1, elapsed / pitDurationMs);
+        setPitTimeLeft(Math.max(0, (pitDurationMs - elapsed) / 1000));
         setPitProgress(prog);
         // Drive into pit box, get serviced, drive back out
         pitCrewGroup.visible = prog > 0.12 && prog < 0.92;
@@ -2082,7 +2083,7 @@ export default function RacingGame() {
           carPos.x += (exit.x - carPos.x) * k;
           carPos.z += (exit.z - carPos.z) * k;
         }
-        if (elapsed >= PIT_DURATION_MS) {
+        if (elapsed >= pitDurationMs) {
           pitStopsRef.current += 1;
           setPitStops(pitStopsRef.current);
           pitActiveRef.current = false;
