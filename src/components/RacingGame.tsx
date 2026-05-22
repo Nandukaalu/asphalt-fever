@@ -354,6 +354,9 @@ export default function RacingGame() {
   const [pitRequested, setPitRequested] = useState(false);
   const [pitActive, setPitActive] = useState(false); // currently in pit box
   const [pitProgress, setPitProgress] = useState(0); // 0..1
+  const [pitTimeLeft, setPitTimeLeft] = useState(0);
+  const [pitStatus, setPitStatus] = useState("Clean stop");
+  const [tyreWearHud, setTyreWearHud] = useState(0);
   const pitRequestedRef = useRef(false);
   const pitActiveRef = useRef(false);
   const pitStopsRef = useRef(0);
@@ -568,6 +571,18 @@ export default function RacingGame() {
     const mount = mountRef.current!;
     const width = mount.clientWidth;
     const height = mount.clientHeight;
+    const revertInfiniteGarage = () => {
+      try {
+        const preT = localStorage.getItem("af-tuning-pre-infinite");
+        const preW = localStorage.getItem("af-wallet-pre-infinite");
+        if (preT) localStorage.setItem("af-tuning-v1", preT);
+        if (preW) localStorage.setItem("af-wallet-v1", preW);
+        localStorage.removeItem("af-infinite-credits");
+        localStorage.removeItem("af-infinite-oneshot");
+        localStorage.removeItem("af-tuning-pre-infinite");
+        localStorage.removeItem("af-wallet-pre-infinite");
+      } catch {}
+    };
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -790,7 +805,7 @@ export default function RacingGame() {
     const pitCenter = curve.getPointAt(0).clone().addScaledVector(pitN, pitOffset);
     const pitHeading = Math.atan2(sfTan.x, sfTan.z); // matches startHeading convention
     // Pit lane asphalt strip
-    const pitStripGeo = new THREE.PlaneGeometry(60, 6);
+    const pitStripGeo = new THREE.PlaneGeometry(104, 6);
     const pitStrip = new THREE.Mesh(
       pitStripGeo,
       new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.85, metalness: 0.05 }),
@@ -803,7 +818,7 @@ export default function RacingGame() {
     // White lane edge stripes
     for (const side of [-1, 1]) {
       const stripe = new THREE.Mesh(
-        new THREE.PlaneGeometry(60, 0.18),
+        new THREE.PlaneGeometry(104, 0.18),
         new THREE.MeshBasicMaterial({ color: 0xffffff }),
       );
       stripe.rotation.x = -Math.PI / 2;
@@ -844,6 +859,29 @@ export default function RacingGame() {
     // Player's box = middle one
     const pitBoxPos = pitBoxPositions[1].clone();
     const pitBoxHeading = pitHeading;
+    const pitEntryPos = pitCenter.clone().addScaledVector(pitForward, -48);
+    const pitExitPos = pitCenter.clone().addScaledVector(pitForward, 48);
+    const trackRejoinPos = curve.getPointAt(0.06);
+
+    // Separate pit-lane entry/exit gates so stops visibly use their own lane.
+    const gateMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.8 });
+    for (const [gatePos, label] of [[pitEntryPos, "PIT IN"], [pitExitPos, "PIT OUT"]] as const) {
+      const gate = new THREE.Mesh(new THREE.PlaneGeometry(6, 0.45), gateMat.clone());
+      gate.rotation.x = -Math.PI / 2;
+      gate.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+      gate.position.copy(gatePos).setY(0.075);
+      scene.add(gate);
+      const labelCv = document.createElement("canvas");
+      labelCv.width = 160; labelCv.height = 48;
+      const lctx = labelCv.getContext("2d")!;
+      lctx.fillStyle = "rgba(0,0,0,0.72)"; lctx.fillRect(0, 0, 160, 48);
+      lctx.fillStyle = "#facc15"; lctx.font = "bold 24px sans-serif"; lctx.textAlign = "center"; lctx.textBaseline = "middle";
+      lctx.fillText(label, 80, 25);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(labelCv), transparent: true }));
+      sign.position.copy(gatePos).addScaledVector(pitN, 5.2).setY(2.5);
+      sign.lookAt(curve.getPointAt(0).x, 2.5, curve.getPointAt(0).z);
+      scene.add(sign);
+    }
 
     // ===== Pit crew + jack + spare tires (animated during pit stop) =====
     const pitCrewGroup = new THREE.Group();
@@ -1801,10 +1839,11 @@ export default function RacingGame() {
 
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
-    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0);
+    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0); setPitTimeLeft(0); setPitStatus("Clean stop"); setTyreWearHud(0);
     pitStopsRef.current = 0; pitRequestedRef.current = false; pitActiveRef.current = false;
     let pitBoxStart = 0; // ms when current pit stop began
-    const PIT_DURATION_MS = 5000;
+    let pitDurationMs = 5000;
+    let pitIssue: "clean" | "slow-gun" | "stuck-tyre" | "unsafe-delay" = "clean";
 
     function closestT(pos: THREE.Vector3) {
       let best = 0, bestD = Infinity;
@@ -1815,6 +1854,13 @@ export default function RacingGame() {
         if (d < bestD) { bestD = d; best = i; }
       }
       return { t: best / centerline.length, dist: Math.sqrt(bestD), idx: best };
+    }
+    function isInPitLane(pos: THREE.Vector3) {
+      const dx = pos.x - pitCenter.x;
+      const dz = pos.z - pitCenter.z;
+      const along = dx * pitForward.x + dz * pitForward.z;
+      const side = dx * pitN.x + dz * pitN.z;
+      return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
     }
 
     const onResize = () => {
@@ -1832,24 +1878,20 @@ export default function RacingGame() {
       const r = localStorage.getItem("af-tuning-v1");
       if (r) tune = { ...tune, ...JSON.parse(r) };
     } catch {}
-    // One-shot infinite-credits easter egg: tuning is loaded above (so buffs apply
-    // for THIS race), then immediately revert localStorage to the pre-cheat state.
+    // One-shot infinite-credits easter egg: tuning is loaded above so buffs apply
+    // for this race, then the saved garage is restored before rewards are paid.
     try {
-      if (localStorage.getItem("af-infinite-oneshot") === "true") {
-        const preT = localStorage.getItem("af-tuning-pre-infinite");
-        const preW = localStorage.getItem("af-wallet-pre-infinite");
-        if (preT) localStorage.setItem("af-tuning-v1", preT);
-        if (preW) localStorage.setItem("af-wallet-v1", preW);
-        localStorage.removeItem("af-infinite-credits");
-        localStorage.removeItem("af-infinite-oneshot");
-        localStorage.removeItem("af-tuning-pre-infinite");
-        localStorage.removeItem("af-wallet-pre-infinite");
-      }
+      if (!isQualifying && localStorage.getItem("af-infinite-oneshot") === "true") revertInfiniteGarage();
     } catch {}
     const tireGrip =
       tune.tires === "Slick" ? 1.15 :
       tune.tires === "Drift" ? 0.88 :
       tune.tires === "All-Weather" ? 0.95 : 1.0;
+    const tireWearRate =
+      tune.tires === "Slick" ? 0.018 :
+      tune.tires === "Drift" ? 0.013 :
+      tune.tires === "All-Weather" ? 0.009 : 0.011;
+    const wetGripBonus = tune.tires === "All-Weather" ? 0.1 : tune.tires === "Slick" ? -0.18 : 0;
     // Constants (derived from tuning)
     const MAX_SPEED = 78 + tune.turbo * 2.2;            // turbo → higher top speed
     const ACCEL = 24 + tune.engine * 1.6;               // engine → faster acceleration
@@ -1862,6 +1904,7 @@ export default function RacingGame() {
     let last = performance.now();
     let raf = 0;
     let hudTick = 0;
+    let advancingFromQualifying = false;
     const introMs = introMsRef.current;
     introMsRef.current = 0;
     const raceStartAt = last + 3800 + introMs;
@@ -1983,7 +2026,8 @@ export default function RacingGame() {
         speed = 0;
         lateralVel = 0;
         const elapsed = now - pitBoxStart;
-        const prog = Math.min(1, elapsed / PIT_DURATION_MS);
+        const prog = Math.min(1, elapsed / pitDurationMs);
+        setPitTimeLeft(Math.max(0, (pitDurationMs - elapsed) / 1000));
         setPitProgress(prog);
         // Drive into pit box, get serviced, drive back out
         pitCrewGroup.visible = prog > 0.12 && prog < 0.92;
@@ -2038,21 +2082,26 @@ export default function RacingGame() {
           jack.scale.y = 1;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
-          const exit = curve.getPointAt(0.04);
+          const exit = prog < 0.95 ? pitExitPos : trackRejoinPos;
           const k = Math.min(1, dt * 4);
           carPos.x += (exit.x - carPos.x) * k;
           carPos.z += (exit.z - carPos.z) * k;
         }
-        if (elapsed >= PIT_DURATION_MS) {
+        if (elapsed >= pitDurationMs) {
           pitStopsRef.current += 1;
           setPitStops(pitStopsRef.current);
           pitActiveRef.current = false;
           setPitActive(false);
           setPitProgress(0);
+          setPitTimeLeft(0);
           setPitRequested(false);
           pitRequestedRef.current = false;
           speed = 8;
+          tireWear = 0;
+          setTyreWearHud(0);
           pitLiftY = 0;
+          carPos.copy(pitExitPos);
+          heading = pitBoxHeading;
           pitCrewGroup.visible = false;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
@@ -2064,31 +2113,36 @@ export default function RacingGame() {
       steering += (steerInput - steering) * Math.min(1, dt * 6);
 
       // ---------- Standard physics (no weather/tire modifiers) ----------
-      const wetness = 0;
-      const hydro = 0;
+      const wetness = W.wet ? Math.min(1, W.rain || 0.55) : 0;
       const speedFrac = Math.abs(speed) / MAX_SPEED;
-      // Keep tire state stable so HUD readouts (if any) stay neutral
-      tireTemp = 0.5;
-      tireWear = 0;
-      if (accel) speed += ACCEL * dt;
-      if (brake) speed -= BRAKE * dt;
+      const hydro = Math.max(0, wetness - 0.65) * Math.max(0, speedFrac - 0.55);
+      const slipWear = Math.min(1, Math.abs(lateralVel) / 24 + (handbrake ? 0.45 : 0));
+      const wearLoad = speedFrac * 0.45 + Math.abs(steering) * speedFrac * 0.35 + slipWear * 0.35;
+      if (!inPit && !preRace && !raceFinished) tireWear = Math.min(1, tireWear + tireWearRate * wearLoad * dt);
+      tireTemp += ((accel ? 0.2 : 0) + speedFrac * 0.45 + Math.abs(steering) * 0.15 - tireTemp) * Math.min(1, dt * 0.35);
+      const wearGrip = Math.max(0.48, 1 - tireWear * 0.46);
+      const weatherGrip = Math.max(0.55, 1 - wetness * 0.2 + wetGripBonus - hydro * 0.35);
+      const gripNow = wearGrip * weatherGrip;
+      if (accel) speed += ACCEL * (0.82 + gripNow * 0.18) * dt;
+      if (brake) speed -= BRAKE * (0.65 + gripNow * 0.35) * dt;
       if (!accel && !brake) speed -= Math.sign(speed) * Math.min(Math.abs(speed), DRAG * dt * 6);
       if (handbrake) speed *= Math.pow(0.05, dt);
-      speed = Math.max(-15, Math.min(MAX_SPEED, speed));
+      speed = Math.max(-15, Math.min(MAX_SPEED * (0.82 + wearGrip * 0.18), speed));
 
       const ct = closestT(carPos);
-      if (!inPit && ct.dist > TRACK_WIDTH / 2 + 1.5) {
+      const inPitLaneNow = isInPitLane(carPos);
+      if (!inPit && !inPitLaneNow && ct.dist > TRACK_WIDTH / 2 + 1.5) {
         speed -= Math.sign(speed) * Math.min(Math.abs(speed), OFF_TRACK_DRAG * dt);
       }
 
       // Heading + lateral slide physics (classic feel)
       const speedFactor = Math.min(1, Math.abs(speed) / 12);
-      const turnRate = STEER_RATE * speedFactor * (speed >= 0 ? 1 : -1);
+      const turnRate = STEER_RATE * gripNow * speedFactor * (speed >= 0 ? 1 : -1);
       const dHeading = steering * turnRate * dt;
       heading += dHeading;
-      const lateralAccel = -dHeading * speed * 0.6;
+      const lateralAccel = -dHeading * speed * (0.6 + (1 - gripNow) * 0.45);
       lateralVel += lateralAccel;
-      lateralVel *= Math.pow(0.04, dt);
+      lateralVel *= Math.pow(Math.max(0.04, 0.16 + (1 - gripNow) * 0.55), dt);
 
       // Move forward + sideways
       const fx = Math.sin(heading), fz = Math.cos(heading);
@@ -2098,7 +2152,8 @@ export default function RacingGame() {
 
       // Wall collision: push back inside, lose speed
       const ct2 = closestT(carPos);
-      if (!inPit && ct2.dist > WALL_LIMIT) {
+      const inPitLaneAfterMove = isInPitLane(carPos);
+      if (!inPit && !inPitLaneAfterMove && ct2.dist > WALL_LIMIT) {
         const center = centerline[ct2.idx];
         const dx = carPos.x - center.x;
         const dz = carPos.z - center.z;
@@ -2170,10 +2225,24 @@ export default function RacingGame() {
           }
           // Begin a pit stop if requested and the race isn't over yet
           if (!isQualifying && pitRequestedRef.current && !raceFinished && !pitActiveRef.current) {
+            const roll = Math.random();
+            pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
+            pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
+              pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
+            );
+            setPitStatus(
+              pitIssue === "slow-gun" ? "Wheel gun delay" :
+              pitIssue === "stuck-tyre" ? "Stuck tyre" :
+              pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
+            );
             pitActiveRef.current = true;
             setPitActive(true);
+            carPos.copy(pitEntryPos);
+            heading = pitBoxHeading;
+            speed = 6;
             pitBoxStart = now;
             setPitProgress(0);
+            setPitTimeLeft(pitDurationMs / 1000);
           }
         }
         // If sectors weren't all hit, the line crossing is ignored — no lap.
@@ -2427,6 +2496,7 @@ export default function RacingGame() {
           bestLap,
           position,
         });
+        setTyreWearHud(tireWear);
 
         // -------- Live timing tower --------
         const toHex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
@@ -2526,6 +2596,7 @@ export default function RacingGame() {
           ];
           standings.sort((a, b) => a.t - b.t);
           setQualifyingGrid(standings.map((s) => s.id));
+          advancingFromQualifying = true;
           setSessionMode("race"); // triggers effect re-run for the actual race
           return;
         }
@@ -2675,6 +2746,7 @@ export default function RacingGame() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("resize", onResize);
+      if (isQualifying && !advancingFromQualifying) revertInfiniteGarage();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
@@ -2867,10 +2939,18 @@ export default function RacingGame() {
             <div className={`text-xl font-bold ${sessionMode === "qualifying" ? "text-fuchsia-300" : "text-red-400"}`}>P{hud.position}</div>
             {sessionMode === "race" && (() => {
               const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
-              if (required === 0) return null;
               const remaining = Math.max(0, required - pitStops);
               return (
                 <>
+                  <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Tyres</div>
+                  <div className="h-1.5 w-20 bg-white/15 overflow-hidden mt-1">
+                    <div
+                      className={`h-full ${tyreWearHud > 0.72 ? "bg-red-500" : tyreWearHud > 0.45 ? "bg-yellow-400" : "bg-emerald-400"}`}
+                      style={{ width: `${Math.round(tyreWearHud * 100)}%` }}
+                    />
+                  </div>
+                  <div className="text-[9px] text-white/60 mt-0.5">{Math.round(tyreWearHud * 100)}% worn</div>
+                  {required === 0 ? null : <>
                   <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pit</div>
                   <div className="flex gap-1 mt-0.5">
                     {Array.from({ length: required }).map((_, i) => (
@@ -2883,6 +2963,7 @@ export default function RacingGame() {
                   {remaining > 0 && pitRequested && !pitActive && (
                     <div className="text-[9px] text-yellow-300 mt-1 uppercase tracking-widest">Box this lap</div>
                   )}
+                  </>}
                 </>
               );
             })()}
@@ -2891,8 +2972,7 @@ export default function RacingGame() {
           {/* PIT button — race only */}
           {sessionMode === "race" && !pitActive && (() => {
             const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
-            if (required === 0) return null;
-            const remaining = Math.max(0, required - pitStops);
+            const remaining = Math.max(0, Math.max(required, 3) - pitStops);
             if (remaining === 0) return null;
             return (
               <button
@@ -2915,8 +2995,9 @@ export default function RacingGame() {
             <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none bg-black/55 backdrop-blur-sm">
               <div className="text-center font-mono">
                 <div className="text-[10px] uppercase tracking-[0.5em] text-yellow-300 mb-2">Pit Stop In Progress</div>
+                <div className="text-sm uppercase tracking-widest text-white/70 mb-2">{pitStatus}</div>
                 <div className="text-6xl sm:text-7xl font-black text-white tabular-nums drop-shadow-[0_0_30px_rgba(250,204,21,0.6)]">
-                  {(5 - pitProgress * 5).toFixed(1)}s
+                  {pitTimeLeft.toFixed(1)}s
                 </div>
                 <div className="mt-4 w-72 sm:w-96 mx-auto h-2 bg-white/10 overflow-hidden">
                   <div
