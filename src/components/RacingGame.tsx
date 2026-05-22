@@ -1777,6 +1777,10 @@ export default function RacingGame() {
     let firstCross = false;
     let raceFinished = false;
     let raceProgress = 0; // total fraction
+    // Sector validation — player must hit sectors 1,2,3 in order before
+    // the start/finish line counts as a completed lap. Prevents driving
+    // backwards across the line for a free lap.
+    let nextSector = 1; // 1 -> 0.25, 2 -> 0.5, 3 -> 0.75, 4 -> finish
 
     // Advanced physics: tire temp/wear, body weight transfer, camera trauma
     let tireTemp = 0.3;       // 0..1 (cold..overheated). Sweet spot ~0.55
