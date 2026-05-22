@@ -494,7 +494,7 @@ function StageBtn({ label, icon, active, onClick }: { label: string; icon: strin
     </button>
   );
 }
-function TuneRow({ label, value, max, cost, onUpgrade }: { label: string; value: number; max: number; cost: number; onUpgrade: () => void }) {
+function TuneRow({ label, value, max, cost, onUpgrade, free }: { label: string; value: number; max: number; cost: number; onUpgrade: () => void; free?: boolean }) {
   const pct = (value / max) * 100;
   return (
     <div>
@@ -502,7 +502,7 @@ function TuneRow({ label, value, max, cost, onUpgrade }: { label: string; value:
         <div className="text-[11px] font-display uppercase tracking-[0.25em] text-foreground">{label}</div>
         <button onClick={onUpgrade} disabled={value >= max}
           className="tap-target px-2.5 rounded-full text-[10px] font-display uppercase tracking-widest border border-primary/60 bg-primary/10 hover:bg-primary/25 disabled:opacity-40 disabled:cursor-not-allowed">
-          {value >= max ? "Max" : `+ ${cost} CR`}
+          {value >= max ? "Max" : free ? "+ FREE" : `+ ${cost} CR`}
         </button>
       </div>
       <div className="h-2 rounded-full bg-muted overflow-hidden">
