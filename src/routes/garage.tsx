@@ -246,8 +246,8 @@ function GaragePage() {
     setTuning(t => {
       const cur = t[field]; if (cur >= 10) return t;
       const cost = 800 + cur * 400;
-      if (wallet.credits < cost) return t;
-      setWallet(w => ({ credits: w.credits - cost }));
+      if (!infiniteMode && wallet.credits < cost) return t;
+      if (!infiniteMode) setWallet(w => ({ credits: w.credits - cost }));
       audio.click();
       return { ...t, [field]: cur + 1 };
     });
