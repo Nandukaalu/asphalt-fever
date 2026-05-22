@@ -290,8 +290,9 @@ function GaragePage() {
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs font-display tracking-widest uppercase">
               <span className="text-accent">◆</span>
-              <span className="text-foreground">{wallet.credits.toLocaleString()}</span>
+              <span className="text-foreground">{infiniteMode ? "∞" : wallet.credits.toLocaleString()}</span>
               <span className="text-muted-foreground">CR</span>
+              {infiniteMode && <span className="text-[9px] text-accent ml-1">VIP</span>}
             </div>
             <button onClick={() => setAudioOn(v => !v)} title="Ambient sound"
               className={`tap-target px-3 rounded-full text-xs font-display uppercase tracking-widest border transition-all ${audioOn ? "border-accent bg-accent/15" : "border-border text-muted-foreground"}`}>
