@@ -1871,24 +1871,20 @@ export default function RacingGame() {
       const r = localStorage.getItem("af-tuning-v1");
       if (r) tune = { ...tune, ...JSON.parse(r) };
     } catch {}
-    // One-shot infinite-credits easter egg: tuning is loaded above (so buffs apply
-    // for THIS race), then immediately revert localStorage to the pre-cheat state.
+    // One-shot infinite-credits easter egg: tuning is loaded above so buffs apply
+    // for this race, then the saved garage is restored before rewards are paid.
     try {
-      if (localStorage.getItem("af-infinite-oneshot") === "true") {
-        const preT = localStorage.getItem("af-tuning-pre-infinite");
-        const preW = localStorage.getItem("af-wallet-pre-infinite");
-        if (preT) localStorage.setItem("af-tuning-v1", preT);
-        if (preW) localStorage.setItem("af-wallet-v1", preW);
-        localStorage.removeItem("af-infinite-credits");
-        localStorage.removeItem("af-infinite-oneshot");
-        localStorage.removeItem("af-tuning-pre-infinite");
-        localStorage.removeItem("af-wallet-pre-infinite");
-      }
+      if (!isQualifying && localStorage.getItem("af-infinite-oneshot") === "true") revertInfiniteGarage();
     } catch {}
     const tireGrip =
       tune.tires === "Slick" ? 1.15 :
       tune.tires === "Drift" ? 0.88 :
       tune.tires === "All-Weather" ? 0.95 : 1.0;
+    const tireWearRate =
+      tune.tires === "Slick" ? 0.018 :
+      tune.tires === "Drift" ? 0.013 :
+      tune.tires === "All-Weather" ? 0.009 : 0.011;
+    const wetGripBonus = tune.tires === "All-Weather" ? 0.1 : tune.tires === "Slick" ? -0.18 : 0;
     // Constants (derived from tuning)
     const MAX_SPEED = 78 + tune.turbo * 2.2;            // turbo → higher top speed
     const ACCEL = 24 + tune.engine * 1.6;               // engine → faster acceleration
