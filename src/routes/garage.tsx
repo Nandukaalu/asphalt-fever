@@ -163,6 +163,9 @@ function GaragePage() {
     loadJSON<Tuning>(TUNING_KEY, { engine: 3, turbo: 2, handling: 4, brakes: 3, suspension: 3, tires: "Sport" })
   );
   const [wallet, setWallet] = useState<Wallet>(() => loadJSON<Wallet>(WALLET_KEY, { credits: 24500 }));
+  const infiniteRef = useRef(false);
+  try { infiniteRef.current = localStorage.getItem("af-infinite-credits") === "true"; } catch {}
+  const [infiniteMode, setInfiniteMode] = useState(infiniteRef.current);
   const [tab, setTab] = useState<"paint" | "wheels" | "neon" | "decals" | "interior" | "tune" | "showroom">("paint");
   const [angle, setAngle] = useState(35); // rotation Y degrees
   const [zoom, setZoom] = useState(1);
