@@ -2777,7 +2777,15 @@ export default function RacingGame() {
 
       {screen === "track" && (
         <>
-        <WeatherSelect weatherId={weatherId} onPick={setWeatherId} />
+        <WeatherSelect
+          weatherId={weatherId}
+          onPick={(id) => {
+            // In multiplayer only the host can change weather; it syncs to all guests
+            if (mode === "multi" && !isHost) return;
+            setWeatherId(id);
+            if (mode === "multi" && isHost) updatePresence({ weatherId: id });
+          }}
+        />
         <TrackSelect
           trackId={trackId}
           career={career}
