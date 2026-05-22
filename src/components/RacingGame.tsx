@@ -2152,7 +2152,8 @@ export default function RacingGame() {
 
       // Wall collision: push back inside, lose speed
       const ct2 = closestT(carPos);
-      if (!inPit && !inPitLaneNow && ct2.dist > WALL_LIMIT) {
+      const inPitLaneAfterMove = isInPitLane(carPos);
+      if (!inPit && !inPitLaneAfterMove && ct2.dist > WALL_LIMIT) {
         const center = centerline[ct2.idx];
         const dx = carPos.x - center.x;
         const dz = carPos.z - center.z;
