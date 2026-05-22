@@ -1855,6 +1855,13 @@ export default function RacingGame() {
       }
       return { t: best / centerline.length, dist: Math.sqrt(bestD), idx: best };
     }
+    function isInPitLane(pos: THREE.Vector3) {
+      const dx = pos.x - pitCenter.x;
+      const dz = pos.z - pitCenter.z;
+      const along = dx * pitForward.x + dz * pitForward.z;
+      const side = dx * pitN.x + dz * pitN.z;
+      return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
+    }
 
     const onResize = () => {
       const w = mount.clientWidth, h = mount.clientHeight;
