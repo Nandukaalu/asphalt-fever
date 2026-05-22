@@ -2105,17 +2105,21 @@ export default function RacingGame() {
       steering += (steerInput - steering) * Math.min(1, dt * 6);
 
       // ---------- Standard physics (no weather/tire modifiers) ----------
-      const wetness = 0;
-      const hydro = 0;
+      const wetness = W.wet ? Math.min(1, W.rain || 0.55) : 0;
       const speedFrac = Math.abs(speed) / MAX_SPEED;
-      // Keep tire state stable so HUD readouts (if any) stay neutral
-      tireTemp = 0.5;
-      tireWear = 0;
-      if (accel) speed += ACCEL * dt;
-      if (brake) speed -= BRAKE * dt;
+      const hydro = Math.max(0, wetness - 0.65) * Math.max(0, speedFrac - 0.55);
+      const slipWear = Math.min(1, Math.abs(lateralVel) / 24 + (handbrake ? 0.45 : 0));
+      const wearLoad = speedFrac * 0.45 + Math.abs(steering) * speedFrac * 0.35 + slipWear * 0.35;
+      if (!inPit && !preRace && !raceFinished) tireWear = Math.min(1, tireWear + tireWearRate * wearLoad * dt);
+      tireTemp += ((accel ? 0.2 : 0) + speedFrac * 0.45 + Math.abs(steering) * 0.15 - tireTemp) * Math.min(1, dt * 0.35);
+      const wearGrip = Math.max(0.48, 1 - tireWear * 0.46);
+      const weatherGrip = Math.max(0.55, 1 - wetness * 0.2 + wetGripBonus - hydro * 0.35);
+      const gripNow = wearGrip * weatherGrip;
+      if (accel) speed += ACCEL * (0.82 + gripNow * 0.18) * dt;
+      if (brake) speed -= BRAKE * (0.65 + gripNow * 0.35) * dt;
       if (!accel && !brake) speed -= Math.sign(speed) * Math.min(Math.abs(speed), DRAG * dt * 6);
       if (handbrake) speed *= Math.pow(0.05, dt);
-      speed = Math.max(-15, Math.min(MAX_SPEED, speed));
+      speed = Math.max(-15, Math.min(MAX_SPEED * (0.82 + wearGrip * 0.18), speed));
 
       const ct = closestT(carPos);
       if (!inPit && ct.dist > TRACK_WIDTH / 2 + 1.5) {
@@ -2124,12 +2128,12 @@ export default function RacingGame() {
 
       // Heading + lateral slide physics (classic feel)
       const speedFactor = Math.min(1, Math.abs(speed) / 12);
-      const turnRate = STEER_RATE * speedFactor * (speed >= 0 ? 1 : -1);
+      const turnRate = STEER_RATE * gripNow * speedFactor * (speed >= 0 ? 1 : -1);
       const dHeading = steering * turnRate * dt;
       heading += dHeading;
-      const lateralAccel = -dHeading * speed * 0.6;
+      const lateralAccel = -dHeading * speed * (0.6 + (1 - gripNow) * 0.45);
       lateralVel += lateralAccel;
-      lateralVel *= Math.pow(0.04, dt);
+      lateralVel *= Math.pow(Math.max(0.04, 0.16 + (1 - gripNow) * 0.55), dt);
 
       // Move forward + sideways
       const fx = Math.sin(heading), fz = Math.cos(heading);
