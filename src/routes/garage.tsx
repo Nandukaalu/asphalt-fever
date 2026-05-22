@@ -418,11 +418,11 @@ function GaragePage() {
               )}
               {tab === "tune" && (
                 <div className="space-y-3">
-                  <TuneRow label="Engine" value={tuning.engine} max={10} cost={800 + tuning.engine * 400} onUpgrade={() => upgrade("engine")} />
-                  <TuneRow label="Turbo" value={tuning.turbo} max={10} cost={800 + tuning.turbo * 400} onUpgrade={() => upgrade("turbo")} />
-                  <TuneRow label="Handling" value={tuning.handling} max={10} cost={800 + tuning.handling * 400} onUpgrade={() => upgrade("handling")} />
-                  <TuneRow label="Brakes" value={tuning.brakes} max={10} cost={800 + tuning.brakes * 400} onUpgrade={() => upgrade("brakes")} />
-                  <TuneRow label="Suspension" value={tuning.suspension} max={10} cost={800 + tuning.suspension * 400} onUpgrade={() => upgrade("suspension")} />
+                  <TuneRow label="Engine" value={tuning.engine} max={10} cost={800 + tuning.engine * 400} onUpgrade={() => upgrade("engine")} free={infiniteMode} />
+                  <TuneRow label="Turbo" value={tuning.turbo} max={10} cost={800 + tuning.turbo * 400} onUpgrade={() => upgrade("turbo")} free={infiniteMode} />
+                  <TuneRow label="Handling" value={tuning.handling} max={10} cost={800 + tuning.handling * 400} onUpgrade={() => upgrade("handling")} free={infiniteMode} />
+                  <TuneRow label="Brakes" value={tuning.brakes} max={10} cost={800 + tuning.brakes * 400} onUpgrade={() => upgrade("brakes")} free={infiniteMode} />
+                  <TuneRow label="Suspension" value={tuning.suspension} max={10} cost={800 + tuning.suspension * 400} onUpgrade={() => upgrade("suspension")} free={infiniteMode} />
                   <Section label="Tires">
                     <Chips values={TIRE_OPTS as unknown as string[]} active={tuning.tires} onPick={(v) => { setTuning(t => ({ ...t, tires: v as Tuning["tires"] })); audio.click(); }} />
                   </Section>
