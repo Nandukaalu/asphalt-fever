@@ -257,6 +257,19 @@ function GaragePage() {
     setPhotoFlash(true);
     setTimeout(() => setPhotoFlash(false), 350);
     audio.click();
+    // iPad easter egg: enable infinite credits for one race only
+    try {
+      const ua = navigator.userAgent || "";
+      const isIpad = /iPad/i.test(ua) || (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+      if (isIpad && !infiniteRef.current) {
+        localStorage.setItem("af-tuning-pre-infinite", JSON.stringify(tuning));
+        localStorage.setItem("af-wallet-pre-infinite", JSON.stringify(wallet));
+        localStorage.setItem("af-infinite-credits", "true");
+        localStorage.setItem("af-infinite-oneshot", "true");
+        infiniteRef.current = true;
+        setInfiniteMode(true);
+      }
+    } catch {}
   }
 
   // drag rotate

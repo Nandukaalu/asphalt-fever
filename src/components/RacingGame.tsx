@@ -1816,13 +1816,24 @@ export default function RacingGame() {
     };
     window.addEventListener("resize", onResize);
 
-    // Constants
-    const MAX_SPEED = 78;
-    const ACCEL = 24;
-    const BRAKE = 60;
+    // Load garage tuning so upgrades actually affect the car on track
+    let tune: { engine: number; turbo: number; handling: number; brakes: number; suspension: number; tires: string } =
+      { engine: 3, turbo: 2, handling: 4, brakes: 3, suspension: 3, tires: "Sport" };
+    try {
+      const r = localStorage.getItem("af-tuning-v1");
+      if (r) tune = { ...tune, ...JSON.parse(r) };
+    } catch {}
+    const tireGrip =
+      tune.tires === "Slick" ? 1.15 :
+      tune.tires === "Drift" ? 0.88 :
+      tune.tires === "All-Weather" ? 0.95 : 1.0;
+    // Constants (derived from tuning)
+    const MAX_SPEED = 78 + tune.turbo * 2.2;            // turbo → higher top speed
+    const ACCEL = 24 + tune.engine * 1.6;               // engine → faster acceleration
+    const BRAKE = 60 + tune.brakes * 3.5;               // brakes → harder braking
     const DRAG = 0.7;
-    const OFF_TRACK_DRAG = 8;
-    const STEER_RATE = 2.7;
+    const OFF_TRACK_DRAG = Math.max(4, 8 - tune.suspension * 0.35); // suspension → less penalty off-track
+    const STEER_RATE = (2.7 + tune.handling * 0.09) * tireGrip;     // handling + tires → cornering
     const WALL_LIMIT = TRACK_WIDTH / 2 + 2.3;
 
     let last = performance.now();
@@ -2500,6 +2511,19 @@ export default function RacingGame() {
       }
 
       if (raceFinished) {
+        // One-shot infinite-credits easter egg (iPad photo button): revert tuning + wallet
+        try {
+          if (localStorage.getItem("af-infinite-oneshot") === "true") {
+            const preT = localStorage.getItem("af-tuning-pre-infinite");
+            const preW = localStorage.getItem("af-wallet-pre-infinite");
+            if (preT) localStorage.setItem("af-tuning-v1", preT);
+            if (preW) localStorage.setItem("af-wallet-v1", preW);
+            localStorage.removeItem("af-infinite-credits");
+            localStorage.removeItem("af-infinite-oneshot");
+            localStorage.removeItem("af-tuning-pre-infinite");
+            localStorage.removeItem("af-wallet-pre-infinite");
+          }
+        } catch {}
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         // Pit-stop penalty: +5s per missed mandatory stop, applied to position
         const missed = Math.max(0, requiredStops - pitStopsRef.current);
