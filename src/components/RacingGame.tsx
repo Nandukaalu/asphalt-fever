@@ -1839,10 +1839,11 @@ export default function RacingGame() {
 
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
-    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0);
+    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0); setPitTimeLeft(0); setPitStatus("Clean stop"); setTyreWearHud(0);
     pitStopsRef.current = 0; pitRequestedRef.current = false; pitActiveRef.current = false;
     let pitBoxStart = 0; // ms when current pit stop began
-    const PIT_DURATION_MS = 5000;
+    let pitDurationMs = 5000;
+    let pitIssue: "clean" | "slow-gun" | "stuck-tyre" | "unsafe-delay" = "clean";
 
     function closestT(pos: THREE.Vector3) {
       let best = 0, bestD = Infinity;
