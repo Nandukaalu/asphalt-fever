@@ -1904,6 +1904,7 @@ export default function RacingGame() {
     let last = performance.now();
     let raf = 0;
     let hudTick = 0;
+    let advancingFromQualifying = false;
     const introMs = introMsRef.current;
     introMsRef.current = 0;
     const raceStartAt = last + 3800 + introMs;
@@ -2594,6 +2595,7 @@ export default function RacingGame() {
           ];
           standings.sort((a, b) => a.t - b.t);
           setQualifyingGrid(standings.map((s) => s.id));
+          advancingFromQualifying = true;
           setSessionMode("race"); // triggers effect re-run for the actual race
           return;
         }
@@ -2743,6 +2745,7 @@ export default function RacingGame() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("resize", onResize);
+      if (isQualifying && !advancingFromQualifying) revertInfiniteGarage();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
