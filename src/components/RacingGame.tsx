@@ -1823,6 +1823,20 @@ export default function RacingGame() {
       const r = localStorage.getItem("af-tuning-v1");
       if (r) tune = { ...tune, ...JSON.parse(r) };
     } catch {}
+    // One-shot infinite-credits easter egg: tuning is loaded above (so buffs apply
+    // for THIS race), then immediately revert localStorage to the pre-cheat state.
+    try {
+      if (localStorage.getItem("af-infinite-oneshot") === "true") {
+        const preT = localStorage.getItem("af-tuning-pre-infinite");
+        const preW = localStorage.getItem("af-wallet-pre-infinite");
+        if (preT) localStorage.setItem("af-tuning-v1", preT);
+        if (preW) localStorage.setItem("af-wallet-v1", preW);
+        localStorage.removeItem("af-infinite-credits");
+        localStorage.removeItem("af-infinite-oneshot");
+        localStorage.removeItem("af-tuning-pre-infinite");
+        localStorage.removeItem("af-wallet-pre-infinite");
+      }
+    } catch {}
     const tireGrip =
       tune.tires === "Slick" ? 1.15 :
       tune.tires === "Drift" ? 0.88 :
@@ -2511,19 +2525,6 @@ export default function RacingGame() {
       }
 
       if (raceFinished) {
-        // One-shot infinite-credits easter egg (iPad photo button): revert tuning + wallet
-        try {
-          if (localStorage.getItem("af-infinite-oneshot") === "true") {
-            const preT = localStorage.getItem("af-tuning-pre-infinite");
-            const preW = localStorage.getItem("af-wallet-pre-infinite");
-            if (preT) localStorage.setItem("af-tuning-v1", preT);
-            if (preW) localStorage.setItem("af-wallet-v1", preW);
-            localStorage.removeItem("af-infinite-credits");
-            localStorage.removeItem("af-infinite-oneshot");
-            localStorage.removeItem("af-tuning-pre-infinite");
-            localStorage.removeItem("af-wallet-pre-infinite");
-          }
-        } catch {}
         const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
         // Pit-stop penalty: +5s per missed mandatory stop, applied to position
         const missed = Math.max(0, requiredStops - pitStopsRef.current);
