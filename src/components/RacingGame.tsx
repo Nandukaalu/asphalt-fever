@@ -805,7 +805,7 @@ export default function RacingGame() {
     const pitCenter = curve.getPointAt(0).clone().addScaledVector(pitN, pitOffset);
     const pitHeading = Math.atan2(sfTan.x, sfTan.z); // matches startHeading convention
     // Pit lane asphalt strip
-    const pitStripGeo = new THREE.PlaneGeometry(60, 6);
+    const pitStripGeo = new THREE.PlaneGeometry(104, 6);
     const pitStrip = new THREE.Mesh(
       pitStripGeo,
       new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.85, metalness: 0.05 }),
@@ -818,7 +818,7 @@ export default function RacingGame() {
     // White lane edge stripes
     for (const side of [-1, 1]) {
       const stripe = new THREE.Mesh(
-        new THREE.PlaneGeometry(60, 0.18),
+        new THREE.PlaneGeometry(104, 0.18),
         new THREE.MeshBasicMaterial({ color: 0xffffff }),
       );
       stripe.rotation.x = -Math.PI / 2;
@@ -859,6 +859,29 @@ export default function RacingGame() {
     // Player's box = middle one
     const pitBoxPos = pitBoxPositions[1].clone();
     const pitBoxHeading = pitHeading;
+    const pitEntryPos = pitCenter.clone().addScaledVector(pitForward, -48);
+    const pitExitPos = pitCenter.clone().addScaledVector(pitForward, 48);
+    const trackRejoinPos = curve.getPointAt(0.06);
+
+    // Separate pit-lane entry/exit gates so stops visibly use their own lane.
+    const gateMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.8 });
+    for (const [gatePos, label] of [[pitEntryPos, "PIT IN"], [pitExitPos, "PIT OUT"]] as const) {
+      const gate = new THREE.Mesh(new THREE.PlaneGeometry(6, 0.45), gateMat.clone());
+      gate.rotation.x = -Math.PI / 2;
+      gate.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+      gate.position.copy(gatePos).setY(0.075);
+      scene.add(gate);
+      const labelCv = document.createElement("canvas");
+      labelCv.width = 160; labelCv.height = 48;
+      const lctx = labelCv.getContext("2d")!;
+      lctx.fillStyle = "rgba(0,0,0,0.72)"; lctx.fillRect(0, 0, 160, 48);
+      lctx.fillStyle = "#facc15"; lctx.font = "bold 24px sans-serif"; lctx.textAlign = "center"; lctx.textBaseline = "middle";
+      lctx.fillText(label, 80, 25);
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(labelCv), transparent: true }));
+      sign.position.copy(gatePos).addScaledVector(pitN, 5.2).setY(2.5);
+      sign.lookAt(curve.getPointAt(0).x, 2.5, curve.getPointAt(0).z);
+      scene.add(sign);
+    }
 
     // ===== Pit crew + jack + spare tires (animated during pit stop) =====
     const pitCrewGroup = new THREE.Group();
