@@ -474,10 +474,11 @@ export default function RacingGame() {
     channelRef.current = ch;
 
     ch.on("presence", { event: "sync" }, () => {
-      const state = ch.presenceState() as Record<string, Array<{ name: string; driverId: string; isHost: boolean; trackId?: string; laps?: 3 | 5 | 10 }>>;
+      const state = ch.presenceState() as Record<string, Array<{ name: string; driverId: string; isHost: boolean; trackId?: string; laps?: 3 | 5 | 10; weatherId?: WeatherId }>>;
       const players: LobbyPlayer[] = [];
       let hostTrackId: string | undefined;
       let hostLaps: 3 | 5 | 10 | undefined;
+      let hostWeather: WeatherId | undefined;
       for (const [pid, metas] of Object.entries(state)) {
         const meta = metas[0];
         if (!meta) continue;
@@ -485,15 +486,21 @@ export default function RacingGame() {
         if (meta.isHost) {
           if (meta.trackId) hostTrackId = meta.trackId;
           if (meta.laps) hostLaps = meta.laps;
+          if (meta.weatherId) hostWeather = meta.weatherId;
         }
       }
       players.sort((a, b) => (a.isHost === b.isHost ? a.name.localeCompare(b.name) : a.isHost ? -1 : 1));
       setLobbyPlayers(players);
       if (!asHost && hostTrackId) setTrackId(hostTrackId);
       if (!asHost && hostLaps) setLapsChoice(hostLaps);
+      if (!asHost && hostWeather) setWeatherId(hostWeather);
     });
 
-    ch.on("broadcast", { event: "start" }, () => {
+    ch.on("broadcast", { event: "start" }, (payload: any) => {
+      const p = payload?.payload as { trackId?: string; weatherId?: WeatherId; laps?: 3 | 5 | 10 } | undefined;
+      if (p?.trackId) setTrackId(p.trackId);
+      if (p?.weatherId) setWeatherId(p.weatherId);
+      if (p?.laps) setLapsChoice(p.laps);
       startSignalRef.current = true;
       setResult(null);
       setScreen("racing");
@@ -516,12 +523,13 @@ export default function RacingGame() {
           isHost: asHost,
           trackId: asHost ? initialTrackId : undefined,
           laps: asHost ? lapsChoice : undefined,
+          weatherId: asHost ? weatherId : undefined,
         });
       }
     });
   }
 
-  async function updatePresence(extra: { driverId?: string; trackId?: string; laps?: 3 | 5 | 10 }) {
+  async function updatePresence(extra: { driverId?: string; trackId?: string; laps?: 3 | 5 | 10; weatherId?: WeatherId }) {
     const ch = channelRef.current;
     if (!ch) return;
     await ch.track({
@@ -530,13 +538,14 @@ export default function RacingGame() {
       isHost,
       trackId: isHost ? (extra.trackId ?? trackId) : undefined,
       laps: isHost ? (extra.laps ?? lapsChoice) : undefined,
+      weatherId: isHost ? (extra.weatherId ?? weatherId) : undefined,
     });
   }
 
   function broadcastStart() {
     const ch = channelRef.current;
     if (!ch) return;
-    ch.send({ type: "broadcast", event: "start", payload: { trackId } });
+    ch.send({ type: "broadcast", event: "start", payload: { trackId, weatherId, laps: lapsChoice } });
     setResult(null);
     setScreen("racing");
   }
