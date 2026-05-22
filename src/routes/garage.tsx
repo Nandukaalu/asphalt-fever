@@ -163,6 +163,9 @@ function GaragePage() {
     loadJSON<Tuning>(TUNING_KEY, { engine: 3, turbo: 2, handling: 4, brakes: 3, suspension: 3, tires: "Sport" })
   );
   const [wallet, setWallet] = useState<Wallet>(() => loadJSON<Wallet>(WALLET_KEY, { credits: 24500 }));
+  const infiniteRef = useRef(false);
+  try { infiniteRef.current = localStorage.getItem("af-infinite-credits") === "true"; } catch {}
+  const [infiniteMode, setInfiniteMode] = useState(infiniteRef.current);
   const [tab, setTab] = useState<"paint" | "wheels" | "neon" | "decals" | "interior" | "tune" | "showroom">("paint");
   const [angle, setAngle] = useState(35); // rotation Y degrees
   const [zoom, setZoom] = useState(1);
@@ -196,6 +199,21 @@ function GaragePage() {
   useEffect(() => { saveJSON(TUNING_KEY, tuning); setSavedAt(Date.now()); }, [tuning]);
   useEffect(() => { saveJSON(WALLET_KEY, wallet); }, [wallet]);
 
+  // Infinite credits toggle (Ctrl+Shift+I)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        const next = !infiniteRef.current;
+        infiniteRef.current = next;
+        setInfiniteMode(next);
+        try { localStorage.setItem("af-infinite-credits", String(next)); } catch {}
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // showroom auto-rotate
   useEffect(() => {
     if (!showroom) return;
@@ -228,8 +246,8 @@ function GaragePage() {
     setTuning(t => {
       const cur = t[field]; if (cur >= 10) return t;
       const cost = 800 + cur * 400;
-      if (wallet.credits < cost) return t;
-      setWallet(w => ({ credits: w.credits - cost }));
+      if (!infiniteMode && wallet.credits < cost) return t;
+      if (!infiniteMode) setWallet(w => ({ credits: w.credits - cost }));
       audio.click();
       return { ...t, [field]: cur + 1 };
     });
@@ -272,8 +290,9 @@ function GaragePage() {
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs font-display tracking-widest uppercase">
               <span className="text-accent">◆</span>
-              <span className="text-foreground">{wallet.credits.toLocaleString()}</span>
+              <span className="text-foreground">{infiniteMode ? "∞" : wallet.credits.toLocaleString()}</span>
               <span className="text-muted-foreground">CR</span>
+              {infiniteMode && <span className="text-[9px] text-accent ml-1">VIP</span>}
             </div>
             <button onClick={() => setAudioOn(v => !v)} title="Ambient sound"
               className={`tap-target px-3 rounded-full text-xs font-display uppercase tracking-widest border transition-all ${audioOn ? "border-accent bg-accent/15" : "border-border text-muted-foreground"}`}>
@@ -399,11 +418,11 @@ function GaragePage() {
               )}
               {tab === "tune" && (
                 <div className="space-y-3">
-                  <TuneRow label="Engine" value={tuning.engine} max={10} cost={800 + tuning.engine * 400} onUpgrade={() => upgrade("engine")} />
-                  <TuneRow label="Turbo" value={tuning.turbo} max={10} cost={800 + tuning.turbo * 400} onUpgrade={() => upgrade("turbo")} />
-                  <TuneRow label="Handling" value={tuning.handling} max={10} cost={800 + tuning.handling * 400} onUpgrade={() => upgrade("handling")} />
-                  <TuneRow label="Brakes" value={tuning.brakes} max={10} cost={800 + tuning.brakes * 400} onUpgrade={() => upgrade("brakes")} />
-                  <TuneRow label="Suspension" value={tuning.suspension} max={10} cost={800 + tuning.suspension * 400} onUpgrade={() => upgrade("suspension")} />
+                  <TuneRow label="Engine" value={tuning.engine} max={10} cost={800 + tuning.engine * 400} onUpgrade={() => upgrade("engine")} free={infiniteMode} />
+                  <TuneRow label="Turbo" value={tuning.turbo} max={10} cost={800 + tuning.turbo * 400} onUpgrade={() => upgrade("turbo")} free={infiniteMode} />
+                  <TuneRow label="Handling" value={tuning.handling} max={10} cost={800 + tuning.handling * 400} onUpgrade={() => upgrade("handling")} free={infiniteMode} />
+                  <TuneRow label="Brakes" value={tuning.brakes} max={10} cost={800 + tuning.brakes * 400} onUpgrade={() => upgrade("brakes")} free={infiniteMode} />
+                  <TuneRow label="Suspension" value={tuning.suspension} max={10} cost={800 + tuning.suspension * 400} onUpgrade={() => upgrade("suspension")} free={infiniteMode} />
                   <Section label="Tires">
                     <Chips values={TIRE_OPTS as unknown as string[]} active={tuning.tires} onPick={(v) => { setTuning(t => ({ ...t, tires: v as Tuning["tires"] })); audio.click(); }} />
                   </Section>
@@ -475,7 +494,7 @@ function StageBtn({ label, icon, active, onClick }: { label: string; icon: strin
     </button>
   );
 }
-function TuneRow({ label, value, max, cost, onUpgrade }: { label: string; value: number; max: number; cost: number; onUpgrade: () => void }) {
+function TuneRow({ label, value, max, cost, onUpgrade, free }: { label: string; value: number; max: number; cost: number; onUpgrade: () => void; free?: boolean }) {
   const pct = (value / max) * 100;
   return (
     <div>
@@ -483,7 +502,7 @@ function TuneRow({ label, value, max, cost, onUpgrade }: { label: string; value:
         <div className="text-[11px] font-display uppercase tracking-[0.25em] text-foreground">{label}</div>
         <button onClick={onUpgrade} disabled={value >= max}
           className="tap-target px-2.5 rounded-full text-[10px] font-display uppercase tracking-widest border border-primary/60 bg-primary/10 hover:bg-primary/25 disabled:opacity-40 disabled:cursor-not-allowed">
-          {value >= max ? "Max" : `+ ${cost} CR`}
+          {value >= max ? "Max" : free ? "+ FREE" : `+ ${cost} CR`}
         </button>
       </div>
       <div className="h-2 rounded-full bg-muted overflow-hidden">
