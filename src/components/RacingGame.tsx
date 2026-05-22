@@ -2108,16 +2108,29 @@ export default function RacingGame() {
       player.wheels[1].rotation.y = steering * 0.4;
       player.steeringGroup.rotation.z = -steering * 0.9;
 
-      // Lap detection — first crossing of start line just arms the timer
+      // Sector detection — count forward crossings of 0.25 / 0.5 / 0.75
+      // in strict order. dt small means it's a real forward cross, not a wrap.
+      if (nextSector <= 3) {
+        const thr = nextSector * 0.25;
+        if (prevT < thr && ct2.t >= thr && (ct2.t - prevT) < 0.5) {
+          nextSector++;
+        }
+      }
+
+      // Lap detection — first crossing of start line just arms the timer.
+      // Subsequent crossings only count as a completed lap when all 4 sectors
+      // were hit in order (prevents reverse-into-finish-line exploit).
       if (prevT > 0.9 && ct2.t < 0.1) {
         if (!firstCross) {
           firstCross = true;
           lapStart = now;
-        } else {
+          nextSector = 1;
+        } else if (nextSector > 3) {
           const lapTime = (now - lapStart) / 1000;
           if (bestLap === 0 || lapTime < bestLap) bestLap = lapTime;
           lap++;
           lapStart = now;
+          nextSector = 1;
           if (lap > totalLaps && !raceFinished) {
             raceFinished = true;
           }
@@ -2129,6 +2142,7 @@ export default function RacingGame() {
             setPitProgress(0);
           }
         }
+        // If sectors weren't all hit, the line crossing is ignored — no lap.
       }
       prevT = ct2.t;
       raceProgress = (lap - 1) + ct2.t;
