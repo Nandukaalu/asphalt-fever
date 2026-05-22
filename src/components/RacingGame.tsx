@@ -2494,6 +2494,7 @@ export default function RacingGame() {
           bestLap,
           position,
         });
+        setTyreWearHud(tireWear);
 
         // -------- Live timing tower --------
         const toHex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
