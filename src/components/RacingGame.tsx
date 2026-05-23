@@ -3138,6 +3138,7 @@ export default function RacingGame() {
       )}
 
       {screen === "result" && result && (
+        <>
         <ResultScreen
           result={result}
           driver={driver}
@@ -3161,6 +3162,12 @@ export default function RacingGame() {
             setShowReplay(true);
           }}
         />
+        {champRoundRef.current && (
+          <Link to="/championship" className="absolute top-3 left-1/2 -translate-x-1/2 z-40 px-5 py-2 bg-yellow-400 text-black font-black tracking-widest uppercase text-xs shadow-[0_0_30px_rgba(252,211,77,0.6)]">
+            🏆 Return to Championship
+          </Link>
+        )}
+        </>
       )}
 
       {showPodium && classification.length > 0 && (
