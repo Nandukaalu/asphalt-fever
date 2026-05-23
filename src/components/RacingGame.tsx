@@ -2704,13 +2704,6 @@ export default function RacingGame() {
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
         setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned });
-        // Championship hand-off
-        if (champRoundRef.current) {
-          // pole = fastest in qualifying grid; fastestLapId already computed below
-          const grid = qualifyingGridRef.current;
-          const pole = grid && grid[0] ? grid[0] : undefined;
-          // We compute FL below; use the local fastest map then.
-        }
         {
           const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
           const lapsByDriver = new Map<string, number>();
