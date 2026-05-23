@@ -430,6 +430,23 @@ export default function RacingGame() {
 
   useEffect(() => { setCareer(loadSave()); }, []);
 
+  // ---- Championship Mode auto-start: read setup from localStorage and jump to qualifying ----
+  const champRoundRef = useRef<ReturnType<typeof readNextRoundSetup> | null>(null);
+  useEffect(() => {
+    const next = readNextRoundSetup();
+    if (!next) return;
+    champRoundRef.current = next;
+    setMode("quick");
+    setTrackId(next.trackId);
+    setLapsChoice(next.laps as 3 | 5 | 10);
+    setWeatherId(next.weather as WeatherId);
+    if (next.playerDriverId) setDriverId(next.playerDriverId);
+    setResult(null);
+    setQualifyingGrid(null);
+    setSessionMode("qualifying");
+    setScreen("racing");
+  }, []);
+
   // Trigger cinematic intro when entering single-player race (not qualifying, not multi)
   useEffect(() => {
     if (screen !== "racing") return;
