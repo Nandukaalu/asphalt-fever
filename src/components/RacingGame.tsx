@@ -2704,6 +2704,13 @@ export default function RacingGame() {
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
         setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned });
+        // Championship hand-off
+        if (champRoundRef.current) {
+          // pole = fastest in qualifying grid; fastestLapId already computed below
+          const grid = qualifyingGridRef.current;
+          const pole = grid && grid[0] ? grid[0] : undefined;
+          // We compute FL below; use the local fastest map then.
+        }
         {
           const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
           const lapsByDriver = new Map<string, number>();
@@ -2739,6 +2746,32 @@ export default function RacingGame() {
             };
           });
           setClassification(cls);
+        }
+        // Championship: write pending round result for /championship to consume
+        if (champRoundRef.current) {
+          const grid = qualifyingGridRef.current;
+          const pole = grid && grid[0] ? grid[0] : undefined;
+          // fastest lap id (same logic as classification block)
+          const lapsByDriver = new Map<string, number>();
+          lapsByDriver.set(driver.id, bestLap);
+          if (!isMulti) ais.forEach((ai) => { if (ai.bestLap > 0) lapsByDriver.set(ai.driver.id, ai.bestLap); });
+          let flId: string | undefined; let flTime = Infinity;
+          lapsByDriver.forEach((t, id) => { if (t > 0 && t < flTime) { flTime = t; flId = id; } });
+          const champPoints =
+            (CHAMP_POINTS[adjustedPosition - 1] ?? 0)
+            + (pole === driver.id ? CHAMP_POLE_POINT : 0)
+            + (flId === driver.id ? CHAMP_FL_POINT : 0);
+          setChampPending({
+            trackId: champRoundRef.current.trackId,
+            order,
+            pole,
+            fastestLap: flId,
+            bestLap: bestLap > 0 ? bestLap : undefined,
+            raceTimeSec: finalRaceTime,
+            playerPosition: adjustedPosition,
+            playerPoints: champPoints,
+          });
+          clearNextRoundSetup();
         }
         if (mode === "career") {
           const cur: CareerSave = loadSave() ?? {
