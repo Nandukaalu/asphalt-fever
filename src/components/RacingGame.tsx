@@ -14,6 +14,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { Link } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import PodiumCeremony, { type PodiumEntry } from "./PodiumCeremony";
+import {
+  readNextRoundSetup,
+  clearNextRoundSetup,
+  setPendingResult as setChampPending,
+  CHAMP_CALENDAR,
+  POINTS_TABLE as CHAMP_POINTS,
+  POLE_POINT as CHAMP_POLE_POINT,
+  FASTEST_LAP_POINT as CHAMP_FL_POINT,
+} from "@/lib/championship";
 
 // ---------------- Types ----------------
 type Driver = {
