@@ -14,6 +14,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { Link } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import PodiumCeremony, { type PodiumEntry } from "./PodiumCeremony";
+import {
+  readNextRoundSetup,
+  clearNextRoundSetup,
+  setPendingResult as setChampPending,
+  CHAMP_CALENDAR,
+  POINTS_TABLE as CHAMP_POINTS,
+  POLE_POINT as CHAMP_POLE_POINT,
+  FASTEST_LAP_POINT as CHAMP_FL_POINT,
+} from "@/lib/championship";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -420,6 +429,23 @@ export default function RacingGame() {
   }, [profile?.username, profile?.display_name]);
 
   useEffect(() => { setCareer(loadSave()); }, []);
+
+  // ---- Championship Mode auto-start: read setup from localStorage and jump to qualifying ----
+  const champRoundRef = useRef<ReturnType<typeof readNextRoundSetup> | null>(null);
+  useEffect(() => {
+    const next = readNextRoundSetup();
+    if (!next) return;
+    champRoundRef.current = next;
+    setMode("quick");
+    setTrackId(next.trackId);
+    setLapsChoice(next.laps as 3 | 5 | 10);
+    setWeatherId(next.weather as WeatherId);
+    if (next.playerDriverId) setDriverId(next.playerDriverId);
+    setResult(null);
+    setQualifyingGrid(null);
+    setSessionMode("qualifying");
+    setScreen("racing");
+  }, []);
 
   // Trigger cinematic intro when entering single-player race (not qualifying, not multi)
   useEffect(() => {
@@ -2714,6 +2740,32 @@ export default function RacingGame() {
           });
           setClassification(cls);
         }
+        // Championship: write pending round result for /championship to consume
+        if (champRoundRef.current) {
+          const grid = qualifyingGridRef.current;
+          const pole = grid && grid[0] ? grid[0] : undefined;
+          // fastest lap id (same logic as classification block)
+          const lapsByDriver = new Map<string, number>();
+          lapsByDriver.set(driver.id, bestLap);
+          if (!isMulti) ais.forEach((ai) => { if (ai.bestLap > 0) lapsByDriver.set(ai.driver.id, ai.bestLap); });
+          let flId: string | undefined; let flTime = Infinity;
+          lapsByDriver.forEach((t, id) => { if (t > 0 && t < flTime) { flTime = t; flId = id; } });
+          const champPoints =
+            (CHAMP_POINTS[adjustedPosition - 1] ?? 0)
+            + (pole === driver.id ? CHAMP_POLE_POINT : 0)
+            + (flId === driver.id ? CHAMP_FL_POINT : 0);
+          setChampPending({
+            trackId: champRoundRef.current.trackId,
+            order,
+            pole,
+            fastestLap: flId,
+            bestLap: bestLap > 0 ? bestLap : undefined,
+            raceTimeSec: finalRaceTime,
+            playerPosition: adjustedPosition,
+            playerPoints: champPoints,
+          });
+          clearNextRoundSetup();
+        }
         if (mode === "career") {
           const cur: CareerSave = loadSave() ?? {
             driverId: driver.id, points: 0, completed: {}, standings: {}, rounds: [],
@@ -3079,6 +3131,7 @@ export default function RacingGame() {
       )}
 
       {screen === "result" && result && (
+        <>
         <ResultScreen
           result={result}
           driver={driver}
@@ -3102,6 +3155,12 @@ export default function RacingGame() {
             setShowReplay(true);
           }}
         />
+        {champRoundRef.current && (
+          <Link to="/championship" className="absolute top-3 left-1/2 -translate-x-1/2 z-40 px-5 py-2 bg-yellow-400 text-black font-black tracking-widest uppercase text-xs shadow-[0_0_30px_rgba(252,211,77,0.6)]">
+            🏆 Return to Championship
+          </Link>
+        )}
+        </>
       )}
 
       {showPodium && classification.length > 0 && (
@@ -3154,6 +3213,9 @@ function MainMenu({ career, onQuick, onCareer, onMulti, onDaily, onLeaderboard, 
         <button onClick={onDaily} className="px-6 py-4 bg-yellow-500/90 hover:bg-yellow-400 text-black font-black tracking-widest uppercase shadow-[0_0_40px_rgba(250,200,0,0.4)]">
           Daily Hub 🎁
         </button>
+        <Link to="/championship" className="px-6 py-4 bg-gradient-to-r from-yellow-500 to-red-600 text-black font-black tracking-widest uppercase text-center shadow-[0_0_40px_rgba(250,80,0,0.45)]">
+          🏆 Championship
+        </Link>
         {career && (
           <div className="mt-4 p-3 border border-white/10 bg-black/30 text-xs">
             <div className="text-white/50 uppercase tracking-widest mb-1">Career</div>
