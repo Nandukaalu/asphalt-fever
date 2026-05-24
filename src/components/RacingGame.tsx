@@ -23,6 +23,16 @@ import {
   POLE_POINT as CHAMP_POLE_POINT,
   FASTEST_LAP_POINT as CHAMP_FL_POINT,
 } from "@/lib/championship";
+import RaceEngineerHUD from "./RaceEngineerHUD";
+import {
+  sayEngineer,
+  maybeSay,
+  resetEngineer,
+  ENGINEER_LINES,
+} from "@/lib/raceEngineer";
+import { createWeatherEvolution } from "@/lib/weatherEvolution";
+import { loadSeason } from "@/lib/championship";
+import { playerTeamProfile, teamPerf } from "@/lib/teams";
 
 // ---------------- Types ----------------
 type Driver = {
