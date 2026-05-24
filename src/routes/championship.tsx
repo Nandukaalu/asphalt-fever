@@ -773,3 +773,59 @@ function FireworksBg() {
     </div>
   );
 }
+
+/* ============================================================
+ * CONTRACT OFFERS (between seasons)
+ * ============================================================ */
+function ContractOffersScreen({ season, onSign, onDecline }: {
+  season: Season;
+  onSign: (teamId: string) => void;
+  onDecline: () => void;
+}) {
+  const rep = playerReputation(season);
+  const offers = useMemo(() => generateContractOffers(season), [season]);
+  return (
+    <div className="min-h-[100dvh] bg-gradient-to-b from-[#06060d] to-black text-white">
+      <div className="max-w-3xl mx-auto px-4 py-10">
+        <div className="text-[10px] uppercase tracking-[0.5em] text-red-400/80">Driver Market</div>
+        <h1 className="text-4xl sm:text-5xl font-black mt-1">Contract Offers</h1>
+        <p className="text-white/60 mt-2">
+          Your season earned you a reputation of <span className="text-yellow-300 font-black">{rep}</span>.
+          These teams want to sign you for next season.
+        </p>
+
+        <div className="mt-6 grid gap-3">
+          {offers.length === 0 && (
+            <div className="p-6 border border-white/10 bg-black/40 text-white/60">
+              No teams are offering this year. Stay with your current team and prove yourself.
+            </div>
+          )}
+          {offers.map((o) => (
+            <div key={o.teamId} className="p-4 border-2 border-white/10 hover:border-red-500/60 transition bg-black/40 flex flex-wrap items-center gap-4">
+              <div className="w-12 h-12 flex items-center justify-center font-black text-black" style={{ background: o.color }}>
+                {o.teamName.slice(0, 1)}
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <div className="font-black text-lg">{o.teamName}</div>
+                <div className="text-[11px] text-white/50 italic">"{o.motto}"</div>
+                <div className="text-xs text-white/70 mt-1">Objective: <b>{o.seasonTarget}</b></div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-widest text-white/50">Signing bonus</div>
+                <div className="text-yellow-300 font-black">+{o.signingBonus} cr</div>
+              </div>
+              <button
+                onClick={() => onSign(o.teamId)}
+                className="px-5 py-3 bg-red-600 hover:bg-red-500 font-black tracking-widest uppercase text-sm"
+              >Sign</button>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={onDecline} className="mt-6 text-white/50 hover:text-white text-xs uppercase tracking-widest underline">
+          Decline all offers and choose freely
+        </button>
+      </div>
+    </div>
+  );
+}
