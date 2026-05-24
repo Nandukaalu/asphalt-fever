@@ -2805,6 +2805,10 @@ export default function RacingGame() {
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
         setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned });
+        // Engineer finish callout
+        if (adjustedPosition === 1) sayEngineer(ENGINEER_LINES.finishWin(), "good", 6000);
+        else if (adjustedPosition <= 3) sayEngineer(ENGINEER_LINES.finishPodium(adjustedPosition), "good", 6000);
+        else sayEngineer(ENGINEER_LINES.finishMid(adjustedPosition), "info", 6000);
         {
           const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
           const lapsByDriver = new Map<string, number>();
