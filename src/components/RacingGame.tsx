@@ -1965,6 +1965,19 @@ export default function RacingGame() {
     // Estimated lap time used for converting progress-gap into seconds
     const lapTimeEst = curveLength(curve) / AI_SPEED;
 
+    // ---- Dynamic weather evolution + Race Engineer ----
+    resetEngineer();
+    const weatherEv = createWeatherEvolution(weatherId);
+    let weatherSnap = weatherEv.current();
+    let lastEngTick = 0;
+    let prevPositionForEng = 1;
+    let prevLapForEng = 1;
+    let raceStartAnnounced = false;
+    let twoToGoSaid = false;
+    let pitRecSaid = false;
+    let lowFuelSaid = false;
+    let prevFastestLapId: string | undefined = undefined;
+
     const animate = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
