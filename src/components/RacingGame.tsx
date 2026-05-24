@@ -2286,6 +2286,16 @@ export default function RacingGame() {
           if (lap > totalLaps && !raceFinished) {
             raceFinished = true;
           }
+          // Engineer: lap-based callouts
+          if (!isQualifying && !raceFinished) {
+            const lapsLeft = totalLaps - (lap - 1);
+            if (lapsLeft === 1) sayEngineer(ENGINEER_LINES.finalLap(), "alert", 4500);
+            else if (lapsLeft === 2 && !twoToGoSaid) { twoToGoSaid = true; sayEngineer(ENGINEER_LINES.twoToGo(), "warn"); }
+            else if (lap === 2) maybeSay("push", ENGINEER_LINES.pushNow(), "good", 20000);
+          }
+          if (isQualifying && bestLap === lapTime) {
+            sayEngineer(ENGINEER_LINES.poleLap(), "good");
+          }
           // Begin a pit stop if requested and the race isn't over yet
           if (!isQualifying && pitRequestedRef.current && !raceFinished && !pitActiveRef.current) {
             const roll = Math.random();
