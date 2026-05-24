@@ -475,6 +475,35 @@ function WeekendPreview({ season, standings, onBack, onStart }: {
           </div>
         )}
 
+        {/* Team objective + weather forecast */}
+        <div className="mt-4 grid sm:grid-cols-2 gap-3">
+          {(() => {
+            const t = playerTeamProfile(season);
+            if (!t) return null;
+            return (
+              <div className="p-4 border border-white/10 bg-black/40">
+                <div className="text-[10px] uppercase tracking-widest text-white/50">Team Briefing</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="inline-block w-3 h-5" style={{ background: t.color }} />
+                  <div className="font-black">{t.name}</div>
+                </div>
+                <div className="text-[11px] italic text-white/60 mt-1">"{t.motto}"</div>
+                <div className="mt-2 text-sm">Objective: <b className="text-yellow-300">{t.seasonTarget}</b></div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] uppercase tracking-widest text-white/60">
+                  <div>Top spd<div className="text-white text-base font-black">{t.rating.topSpeed}</div></div>
+                  <div>Handling<div className="text-white text-base font-black">{t.rating.handling}</div></div>
+                  <div>Reliab.<div className="text-white text-base font-black">{t.rating.reliability}</div></div>
+                </div>
+              </div>
+            );
+          })()}
+          <div className="p-4 border border-white/10 bg-black/40">
+            <div className="text-[10px] uppercase tracking-widest text-white/50">Weather Forecast</div>
+            <div className="text-sm mt-1 leading-relaxed">{forecastForRace(r.weather)}</div>
+            <div className="text-[10px] text-white/40 mt-2">Conditions may evolve during the race.</div>
+          </div>
+        </div>
+
         {/* Championship battle */}
         <div className="mt-6 grid sm:grid-cols-2 gap-3">
           <div className="p-4 border border-white/10 bg-black/40">
