@@ -1928,13 +1928,16 @@ export default function RacingGame() {
       tune.tires === "Drift" ? 0.013 :
       tune.tires === "All-Weather" ? 0.009 : 0.011;
     const wetGripBonus = tune.tires === "All-Weather" ? 0.1 : tune.tires === "Slick" ? -0.18 : 0;
+    // ---- Team performance multipliers (from contract/championship team) ----
+    const teamProfile = playerTeamProfile(loadSeason());
+    const perf = teamPerf(teamProfile);
     // Constants (derived from tuning)
-    const MAX_SPEED = 78 + tune.turbo * 2.2;            // turbo → higher top speed
-    const ACCEL = 24 + tune.engine * 1.6;               // engine → faster acceleration
-    const BRAKE = 60 + tune.brakes * 3.5;               // brakes → harder braking
+    const MAX_SPEED = (78 + tune.turbo * 2.2) * perf.topSpeed;     // turbo + team chassis
+    const ACCEL = (24 + tune.engine * 1.6) * perf.accel;           // engine + team powertrain
+    const BRAKE = 60 + tune.brakes * 3.5;                          // brakes
     const DRAG = 0.7;
     const OFF_TRACK_DRAG = Math.max(4, 8 - tune.suspension * 0.35); // suspension → less penalty off-track
-    const STEER_RATE = (2.7 + tune.handling * 0.09) * tireGrip;     // handling + tires → cornering
+    const STEER_RATE = (2.7 + tune.handling * 0.09) * tireGrip * perf.handling; // + team handling
     const WALL_LIMIT = TRACK_WIDTH / 2 + 2.3;
 
     let last = performance.now();
