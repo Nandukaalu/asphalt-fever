@@ -23,6 +23,16 @@ import {
   POLE_POINT as CHAMP_POLE_POINT,
   FASTEST_LAP_POINT as CHAMP_FL_POINT,
 } from "@/lib/championship";
+import RaceEngineerHUD from "./RaceEngineerHUD";
+import {
+  sayEngineer,
+  maybeSay,
+  resetEngineer,
+  ENGINEER_LINES,
+} from "@/lib/raceEngineer";
+import { createWeatherEvolution } from "@/lib/weatherEvolution";
+import { loadSeason } from "@/lib/championship";
+import { playerTeamProfile, teamPerf } from "@/lib/teams";
 
 // ---------------- Types ----------------
 type Driver = {
@@ -1918,13 +1928,16 @@ export default function RacingGame() {
       tune.tires === "Drift" ? 0.013 :
       tune.tires === "All-Weather" ? 0.009 : 0.011;
     const wetGripBonus = tune.tires === "All-Weather" ? 0.1 : tune.tires === "Slick" ? -0.18 : 0;
+    // ---- Team performance multipliers (from contract/championship team) ----
+    const teamProfile = playerTeamProfile(loadSeason());
+    const perf = teamPerf(teamProfile);
     // Constants (derived from tuning)
-    const MAX_SPEED = 78 + tune.turbo * 2.2;            // turbo → higher top speed
-    const ACCEL = 24 + tune.engine * 1.6;               // engine → faster acceleration
-    const BRAKE = 60 + tune.brakes * 3.5;               // brakes → harder braking
+    const MAX_SPEED = (78 + tune.turbo * 2.2) * perf.topSpeed;     // turbo + team chassis
+    const ACCEL = (24 + tune.engine * 1.6) * perf.accel;           // engine + team powertrain
+    const BRAKE = 60 + tune.brakes * 3.5;                          // brakes
     const DRAG = 0.7;
     const OFF_TRACK_DRAG = Math.max(4, 8 - tune.suspension * 0.35); // suspension → less penalty off-track
-    const STEER_RATE = (2.7 + tune.handling * 0.09) * tireGrip;     // handling + tires → cornering
+    const STEER_RATE = (2.7 + tune.handling * 0.09) * tireGrip * perf.handling; // + team handling
     const WALL_LIMIT = TRACK_WIDTH / 2 + 2.3;
 
     let last = performance.now();
@@ -1951,6 +1964,19 @@ export default function RacingGame() {
 
     // Estimated lap time used for converting progress-gap into seconds
     const lapTimeEst = curveLength(curve) / AI_SPEED;
+
+    // ---- Dynamic weather evolution + Race Engineer ----
+    resetEngineer();
+    const weatherEv = createWeatherEvolution(weatherId);
+    let weatherSnap = weatherEv.current();
+    let lastEngTick = 0;
+    let prevPositionForEng = 1;
+    let prevLapForEng = 1;
+    let raceStartAnnounced = false;
+    let twoToGoSaid = false;
+    let pitRecSaid = false;
+    let lowFuelSaid = false;
+    let prevFastestLapId: string | undefined = undefined;
 
     const animate = () => {
       const now = performance.now();
@@ -2131,6 +2157,9 @@ export default function RacingGame() {
           pitCrewGroup.visible = false;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
+          if (pitIssue === "clean") sayEngineer(ENGINEER_LINES.pitClean(), "good");
+          else sayEngineer(ENGINEER_LINES.pitMessy(), "alert");
+          pitRecSaid = false;
         }
       }
 
@@ -2139,7 +2168,15 @@ export default function RacingGame() {
       steering += (steerInput - steering) * Math.min(1, dt * 6);
 
       // ---------- Standard physics (no weather/tire modifiers) ----------
-      const wetness = W.wet ? Math.min(1, W.rain || 0.55) : 0;
+      // Dynamic weather: evolve and use live wetness instead of static W.rain.
+      weatherSnap = weatherEv.step(dt, raceProgress, totalLaps);
+      const wetness = Math.max(W.wet ? Math.min(1, W.rain || 0.55) * 0.3 : 0, weatherSnap.wetness);
+      // Subtle fog density tracking visibility
+      if (scene.fog && (scene.fog as THREE.FogExp2).density !== undefined) {
+        const f = scene.fog as THREE.FogExp2;
+        const targetDensity = W.fog.density + (1 - weatherSnap.visibility) * 0.012;
+        f.density += (targetDensity - f.density) * Math.min(1, dt * 0.5);
+      }
       const speedFrac = Math.abs(speed) / MAX_SPEED;
       const hydro = Math.max(0, wetness - 0.65) * Math.max(0, speedFrac - 0.55);
       const slipWear = Math.min(1, Math.abs(lateralVel) / 24 + (handbrake ? 0.45 : 0));
@@ -2248,6 +2285,16 @@ export default function RacingGame() {
           nextSector = 1;
           if (lap > totalLaps && !raceFinished) {
             raceFinished = true;
+          }
+          // Engineer: lap-based callouts
+          if (!isQualifying && !raceFinished) {
+            const lapsLeft = totalLaps - (lap - 1);
+            if (lapsLeft === 1) sayEngineer(ENGINEER_LINES.finalLap(), "alert", 4500);
+            else if (lapsLeft === 2 && !twoToGoSaid) { twoToGoSaid = true; sayEngineer(ENGINEER_LINES.twoToGo(), "warn"); }
+            else if (lap === 2) maybeSay("push", ENGINEER_LINES.pushNow(), "good", 20000);
+          }
+          if (isQualifying && bestLap === lapTime) {
+            sayEngineer(ENGINEER_LINES.poleLap(), "good");
           }
           // Begin a pit stop if requested and the race isn't over yet
           if (!isQualifying && pitRequestedRef.current && !raceFinished && !pitActiveRef.current) {
@@ -2600,6 +2647,60 @@ export default function RacingGame() {
         });
         setLiveBoard(entries);
         setFastestLapTime(fl);
+
+        // ------- Race Engineer: HUD-rate callouts -------
+        if (!raceStartAnnounced && now >= raceStartAt) {
+          raceStartAnnounced = true;
+          sayEngineer(ENGINEER_LINES.raceStart(), "info", 3500);
+        }
+        // Player row + position
+        const playerIdx = entries.findIndex((e) => e.isPlayer);
+        const myPos = playerIdx >= 0 ? playerIdx + 1 : 1;
+        // Fastest lap "owner" changed → if it's the player, celebrate
+        if (fl > 0) {
+          const flRow = entries.find((e) => e.isFastestLap);
+          const flId = flRow?.id;
+          if (flId !== prevFastestLapId) {
+            prevFastestLapId = flId;
+            if (flRow?.isPlayer && !isQualifying) {
+              maybeSay("fl-player", ENGINEER_LINES.fastestLap(), "good", 30000);
+            }
+          }
+        }
+        // Position change callouts
+        if (myPos !== prevPositionForEng && !isQualifying) {
+          if (myPos < prevPositionForEng) maybeSay(`gain-${myPos}`, ENGINEER_LINES.overtake(), "good", 8000);
+          else maybeSay(`lose-${myPos}`, ENGINEER_LINES.lostPlace(myPos), "warn", 10000);
+          prevPositionForEng = myPos;
+        }
+        // Gap to leader / car ahead every ~12s
+        if (!isQualifying && now - lastEngTick > 12000) {
+          lastEngTick = now;
+          if (myPos > 1 && playerIdx >= 0) {
+            const ahead = entries[playerIdx - 1];
+            const gapStr = ahead?.gap?.startsWith("+") ? ahead.gap.slice(1) : ahead?.gap;
+            const num = Number(gapStr);
+            if (!Number.isNaN(num) && num > 0 && num < 90) {
+              if (num < 1.5) maybeSay("catch", ENGINEER_LINES.gainingP(myPos - 1), "good", 14000);
+              else maybeSay("gap-ahead", ENGINEER_LINES.gapAhead(num), "info", 14000);
+            }
+          } else if (myPos === 1 && entries[1]) {
+            const g = entries[1].gap?.startsWith("+") ? entries[1].gap.slice(1) : "";
+            const n = Number(g);
+            if (!Number.isNaN(n) && n > 0) maybeSay("lead-gap", `Gap to P2: ${n.toFixed(1)} seconds. Manage it.`, "info", 14000);
+          }
+        }
+        // Pit recommendation when tyres are gone
+        if (!isQualifying && !pitRecSaid && tireWear > 0.78 && !pitActiveRef.current) {
+          pitRecSaid = true;
+          sayEngineer(ENGINEER_LINES.pitRecommend(), "warn", 4500);
+        }
+        // Low fuel: simulate from race fraction (last 25%)
+        if (!isQualifying && !lowFuelSaid && raceProgress / totalLaps > 0.78) {
+          lowFuelSaid = true;
+          sayEngineer(ENGINEER_LINES.fuelLow(), "warn", 4500);
+        }
+        prevLapForEng = lap;
       }
 
       // Replay sampling (~10 Hz, capped)
@@ -2704,6 +2805,10 @@ export default function RacingGame() {
         standingsList.sort((a, b) => b.prog - a.prog);
         const order = standingsList.map((s) => s.id);
         setResult({ position: adjustedPosition, bestLap, points, credits: creditsEarned });
+        // Engineer finish callout
+        if (adjustedPosition === 1) sayEngineer(ENGINEER_LINES.finishWin(), "good", 6000);
+        else if (adjustedPosition <= 3) sayEngineer(ENGINEER_LINES.finishPodium(adjustedPosition), "good", 6000);
+        else sayEngineer(ENGINEER_LINES.finishMid(adjustedPosition), "info", 6000);
         {
           const toHex2 = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
           const lapsByDriver = new Map<string, number>();
@@ -3076,6 +3181,8 @@ export default function RacingGame() {
           </div>
 
           <Speedometer speed={hud.speed} gear={hud.gear} />
+
+          <RaceEngineerHUD />
 
           <LiveTiming entries={liveBoard} totalLaps={hud.totalLaps} fastestLap={fastestLapTime} />
 

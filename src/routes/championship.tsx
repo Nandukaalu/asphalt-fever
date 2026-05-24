@@ -22,6 +22,20 @@ import {
   type Season,
   type TeamStanding,
 } from "@/lib/championship";
+import {
+  TEAMS,
+  teamByChampName,
+  teamById,
+  playerTeamProfile,
+  playerReputation,
+  generateContractOffers,
+  loadContractTeamId,
+  saveContractTeamId,
+  saveStoredReputation,
+  type ContractOffer,
+  type TeamProfile,
+} from "@/lib/teams";
+import { forecastForRace } from "@/lib/weatherEvolution";
 
 export const Route = createFileRoute("/championship")({
   component: ChampionshipPage,
@@ -38,6 +52,7 @@ type View =
   | "calendar"     // season hub
   | "preview"      // race weekend preview
   | "post-race"    // results overlay shown after takePendingResult
+  | "contracts"    // contract offer screen after finale before new season
   | "finale-awards"; // season over ceremony
 
 function ChampionshipPage() {
@@ -92,6 +107,34 @@ function ChampionshipPage() {
       <FinaleAwards
         season={season}
         onReset={() => {
+          // Persist reputation before season is wiped
+          saveStoredReputation(playerReputation(season));
+          setView("contracts");
+        }}
+      />
+    );
+  }
+
+  // ---------------- CONTRACT OFFERS (between seasons) ----------------
+  if (view === "contracts") {
+    return (
+      <ContractOffersScreen
+        season={season}
+        onSign={(teamId) => {
+          saveContractTeamId(teamId);
+          // Award signing bonus credits to wallet
+          try {
+            const team = teamById(teamId);
+            const bonus = team ? Math.round(800 + team.rating.prestige * 25) : 1000;
+            const raw = localStorage.getItem("af-wallet-v1");
+            const cur = raw ? JSON.parse(raw) : { credits: 0 };
+            localStorage.setItem("af-wallet-v1", JSON.stringify({ ...cur, credits: (Number(cur.credits) || 0) + bonus }));
+          } catch {}
+          saveSeason(null);
+          setSeason(null);
+          setView("intro");
+        }}
+        onDecline={() => {
           saveSeason(null);
           setSeason(null);
           setView("intro");
@@ -432,6 +475,35 @@ function WeekendPreview({ season, standings, onBack, onStart }: {
           </div>
         )}
 
+        {/* Team objective + weather forecast */}
+        <div className="mt-4 grid sm:grid-cols-2 gap-3">
+          {(() => {
+            const t = playerTeamProfile(season);
+            if (!t) return null;
+            return (
+              <div className="p-4 border border-white/10 bg-black/40">
+                <div className="text-[10px] uppercase tracking-widest text-white/50">Team Briefing</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="inline-block w-3 h-5" style={{ background: t.color }} />
+                  <div className="font-black">{t.name}</div>
+                </div>
+                <div className="text-[11px] italic text-white/60 mt-1">"{t.motto}"</div>
+                <div className="mt-2 text-sm">Objective: <b className="text-yellow-300">{t.seasonTarget}</b></div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[10px] uppercase tracking-widest text-white/60">
+                  <div>Top spd<div className="text-white text-base font-black">{t.rating.topSpeed}</div></div>
+                  <div>Handling<div className="text-white text-base font-black">{t.rating.handling}</div></div>
+                  <div>Reliab.<div className="text-white text-base font-black">{t.rating.reliability}</div></div>
+                </div>
+              </div>
+            );
+          })()}
+          <div className="p-4 border border-white/10 bg-black/40">
+            <div className="text-[10px] uppercase tracking-widest text-white/50">Weather Forecast</div>
+            <div className="text-sm mt-1 leading-relaxed">{forecastForRace(r.weather)}</div>
+            <div className="text-[10px] text-white/40 mt-2">Conditions may evolve during the race.</div>
+          </div>
+        </div>
+
         {/* Championship battle */}
         <div className="mt-6 grid sm:grid-cols-2 gap-3">
           <div className="p-4 border border-white/10 bg-black/40">
@@ -735,6 +807,62 @@ function FireworksBg() {
         />
       ))}
       <style>{`@keyframes champBurst { 0%,90%,100%{opacity:0; transform:scale(.6)} 50%{opacity:1; transform:scale(1.6)} }`}</style>
+    </div>
+  );
+}
+
+/* ============================================================
+ * CONTRACT OFFERS (between seasons)
+ * ============================================================ */
+function ContractOffersScreen({ season, onSign, onDecline }: {
+  season: Season;
+  onSign: (teamId: string) => void;
+  onDecline: () => void;
+}) {
+  const rep = playerReputation(season);
+  const offers = useMemo(() => generateContractOffers(season), [season]);
+  return (
+    <div className="min-h-[100dvh] bg-gradient-to-b from-[#06060d] to-black text-white">
+      <div className="max-w-3xl mx-auto px-4 py-10">
+        <div className="text-[10px] uppercase tracking-[0.5em] text-red-400/80">Driver Market</div>
+        <h1 className="text-4xl sm:text-5xl font-black mt-1">Contract Offers</h1>
+        <p className="text-white/60 mt-2">
+          Your season earned you a reputation of <span className="text-yellow-300 font-black">{rep}</span>.
+          These teams want to sign you for next season.
+        </p>
+
+        <div className="mt-6 grid gap-3">
+          {offers.length === 0 && (
+            <div className="p-6 border border-white/10 bg-black/40 text-white/60">
+              No teams are offering this year. Stay with your current team and prove yourself.
+            </div>
+          )}
+          {offers.map((o) => (
+            <div key={o.teamId} className="p-4 border-2 border-white/10 hover:border-red-500/60 transition bg-black/40 flex flex-wrap items-center gap-4">
+              <div className="w-12 h-12 flex items-center justify-center font-black text-black" style={{ background: o.color }}>
+                {o.teamName.slice(0, 1)}
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <div className="font-black text-lg">{o.teamName}</div>
+                <div className="text-[11px] text-white/50 italic">"{o.motto}"</div>
+                <div className="text-xs text-white/70 mt-1">Objective: <b>{o.seasonTarget}</b></div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-widest text-white/50">Signing bonus</div>
+                <div className="text-yellow-300 font-black">+{o.signingBonus} cr</div>
+              </div>
+              <button
+                onClick={() => onSign(o.teamId)}
+                className="px-5 py-3 bg-red-600 hover:bg-red-500 font-black tracking-widest uppercase text-sm"
+              >Sign</button>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={onDecline} className="mt-6 text-white/50 hover:text-white text-xs uppercase tracking-widest underline">
+          Decline all offers and choose freely
+        </button>
+      </div>
     </div>
   );
 }
