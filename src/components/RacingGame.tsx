@@ -3182,6 +3182,8 @@ export default function RacingGame() {
 
           <Speedometer speed={hud.speed} gear={hud.gear} />
 
+          <RaceEngineerHUD />
+
           <LiveTiming entries={liveBoard} totalLaps={hud.totalLaps} fastestLap={fastestLapTime} />
 
           <button
