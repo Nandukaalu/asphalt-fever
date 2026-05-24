@@ -2165,7 +2165,15 @@ export default function RacingGame() {
       steering += (steerInput - steering) * Math.min(1, dt * 6);
 
       // ---------- Standard physics (no weather/tire modifiers) ----------
-      const wetness = W.wet ? Math.min(1, W.rain || 0.55) : 0;
+      // Dynamic weather: evolve and use live wetness instead of static W.rain.
+      weatherSnap = weatherEv.step(dt, raceProgress, totalLaps);
+      const wetness = Math.max(W.wet ? Math.min(1, W.rain || 0.55) * 0.3 : 0, weatherSnap.wetness);
+      // Subtle fog density tracking visibility
+      if (scene.fog && (scene.fog as THREE.FogExp2).density !== undefined) {
+        const f = scene.fog as THREE.FogExp2;
+        const targetDensity = W.fog.density + (1 - weatherSnap.visibility) * 0.012;
+        f.density += (targetDensity - f.density) * Math.min(1, dt * 0.5);
+      }
       const speedFrac = Math.abs(speed) / MAX_SPEED;
       const hydro = Math.max(0, wetness - 0.65) * Math.max(0, speedFrac - 0.55);
       const slipWear = Math.min(1, Math.abs(lateralVel) / 24 + (handbrake ? 0.45 : 0));
