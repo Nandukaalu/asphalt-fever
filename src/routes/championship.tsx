@@ -107,6 +107,26 @@ function ChampionshipPage() {
       <FinaleAwards
         season={season}
         onReset={() => {
+          // Persist reputation before season is wiped
+          saveStoredReputation(playerReputation(season));
+          setView("contracts");
+        }}
+      />
+    );
+  }
+
+  // ---------------- CONTRACT OFFERS (between seasons) ----------------
+  if (view === "contracts") {
+    return (
+      <ContractOffersScreen
+        season={season}
+        onSign={(teamId) => {
+          saveContractTeamId(teamId);
+          saveSeason(null);
+          setSeason(null);
+          setView("intro");
+        }}
+        onDecline={() => {
           saveSeason(null);
           setSeason(null);
           setView("intro");
