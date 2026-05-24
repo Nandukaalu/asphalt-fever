@@ -2157,6 +2157,9 @@ export default function RacingGame() {
           pitCrewGroup.visible = false;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
+          if (pitIssue === "clean") sayEngineer(ENGINEER_LINES.pitClean(), "good");
+          else sayEngineer(ENGINEER_LINES.pitMessy(), "alert");
+          pitRecSaid = false;
         }
       }
 
