@@ -22,6 +22,20 @@ import {
   type Season,
   type TeamStanding,
 } from "@/lib/championship";
+import {
+  TEAMS,
+  teamByChampName,
+  teamById,
+  playerTeamProfile,
+  playerReputation,
+  generateContractOffers,
+  loadContractTeamId,
+  saveContractTeamId,
+  saveStoredReputation,
+  type ContractOffer,
+  type TeamProfile,
+} from "@/lib/teams";
+import { forecastForRace } from "@/lib/weatherEvolution";
 
 export const Route = createFileRoute("/championship")({
   component: ChampionshipPage,
@@ -38,6 +52,7 @@ type View =
   | "calendar"     // season hub
   | "preview"      // race weekend preview
   | "post-race"    // results overlay shown after takePendingResult
+  | "contracts"    // contract offer screen after finale before new season
   | "finale-awards"; // season over ceremony
 
 function ChampionshipPage() {
