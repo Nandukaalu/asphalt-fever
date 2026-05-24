@@ -122,6 +122,14 @@ function ChampionshipPage() {
         season={season}
         onSign={(teamId) => {
           saveContractTeamId(teamId);
+          // Award signing bonus credits to wallet
+          try {
+            const team = teamById(teamId);
+            const bonus = team ? Math.round(800 + team.rating.prestige * 25) : 1000;
+            const raw = localStorage.getItem("af-wallet-v1");
+            const cur = raw ? JSON.parse(raw) : { credits: 0 };
+            localStorage.setItem("af-wallet-v1", JSON.stringify({ ...cur, credits: (Number(cur.credits) || 0) + bonus }));
+          } catch {}
           saveSeason(null);
           setSeason(null);
           setView("intro");
