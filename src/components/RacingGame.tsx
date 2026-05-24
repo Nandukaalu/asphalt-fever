@@ -2647,6 +2647,60 @@ export default function RacingGame() {
         });
         setLiveBoard(entries);
         setFastestLapTime(fl);
+
+        // ------- Race Engineer: HUD-rate callouts -------
+        if (!raceStartAnnounced && now >= raceStartAt) {
+          raceStartAnnounced = true;
+          sayEngineer(ENGINEER_LINES.raceStart(), "info", 3500);
+        }
+        // Player row + position
+        const playerIdx = entries.findIndex((e) => e.isPlayer);
+        const myPos = playerIdx >= 0 ? playerIdx + 1 : 1;
+        // Fastest lap "owner" changed → if it's the player, celebrate
+        if (fl > 0) {
+          const flRow = entries.find((e) => e.isFastestLap);
+          const flId = flRow?.id;
+          if (flId !== prevFastestLapId) {
+            prevFastestLapId = flId;
+            if (flRow?.isPlayer && !isQualifying) {
+              maybeSay("fl-player", ENGINEER_LINES.fastestLap(), "good", 30000);
+            }
+          }
+        }
+        // Position change callouts
+        if (myPos !== prevPositionForEng && !isQualifying) {
+          if (myPos < prevPositionForEng) maybeSay(`gain-${myPos}`, ENGINEER_LINES.overtake(), "good", 8000);
+          else maybeSay(`lose-${myPos}`, ENGINEER_LINES.lostPlace(myPos), "warn", 10000);
+          prevPositionForEng = myPos;
+        }
+        // Gap to leader / car ahead every ~12s
+        if (!isQualifying && now - lastEngTick > 12000) {
+          lastEngTick = now;
+          if (myPos > 1 && playerIdx >= 0) {
+            const ahead = entries[playerIdx - 1];
+            const gapStr = ahead?.gap?.startsWith("+") ? ahead.gap.slice(1) : ahead?.gap;
+            const num = Number(gapStr);
+            if (!Number.isNaN(num) && num > 0 && num < 90) {
+              if (num < 1.5) maybeSay("catch", ENGINEER_LINES.gainingP(myPos - 1), "good", 14000);
+              else maybeSay("gap-ahead", ENGINEER_LINES.gapAhead(num), "info", 14000);
+            }
+          } else if (myPos === 1 && entries[1]) {
+            const g = entries[1].gap?.startsWith("+") ? entries[1].gap.slice(1) : "";
+            const n = Number(g);
+            if (!Number.isNaN(n) && n > 0) maybeSay("lead-gap", `Gap to P2: ${n.toFixed(1)} seconds. Manage it.`, "info", 14000);
+          }
+        }
+        // Pit recommendation when tyres are gone
+        if (!isQualifying && !pitRecSaid && tireWear > 0.78 && !pitActiveRef.current) {
+          pitRecSaid = true;
+          sayEngineer(ENGINEER_LINES.pitRecommend(), "warn", 4500);
+        }
+        // Low fuel: simulate from race fraction (last 25%)
+        if (!isQualifying && !lowFuelSaid && raceProgress / totalLaps > 0.78) {
+          lowFuelSaid = true;
+          sayEngineer(ENGINEER_LINES.fuelLow(), "warn", 4500);
+        }
+        prevLapForEng = lap;
       }
 
       // Replay sampling (~10 Hz, capped)
