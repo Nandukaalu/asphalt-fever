@@ -1686,8 +1686,11 @@ export default function RacingGame() {
     // ----- Rain particles -----
     let rainPoints: THREE.Points | null = null;
     let rainPositions: Float32Array | null = null;
-    const RAIN_COUNT = W.rain > 0 ? Math.floor(1500 * Math.min(W.rain, 1.5)) : 0;
-    if (RAIN_COUNT > 0) {
+    // Always allocate a rain buffer so dynamic weather can fade rain in
+    // mid-race even when the session started dry.
+    const RAIN_COUNT = 1800;
+    let rainMat: THREE.PointsMaterial | null = null;
+    {
       rainPositions = new Float32Array(RAIN_COUNT * 3);
       for (let i = 0; i < RAIN_COUNT; i++) {
         rainPositions[i * 3 + 0] = (Math.random() - 0.5) * 280;
@@ -1696,11 +1699,12 @@ export default function RacingGame() {
       }
       const rg = new THREE.BufferGeometry();
       rg.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
-      const rm = new THREE.PointsMaterial({
+      rainMat = new THREE.PointsMaterial({
         color: 0xb8d8ff, size: 0.55, transparent: true,
-        opacity: 0.55, depthWrite: false,
+        opacity: 0, depthWrite: false,
       });
-      rainPoints = new THREE.Points(rg, rm);
+      rainPoints = new THREE.Points(rg, rainMat);
+      rainPoints.visible = false;
       scene.add(rainPoints);
     }
 
