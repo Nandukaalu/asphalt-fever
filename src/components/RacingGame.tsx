@@ -2494,17 +2494,23 @@ export default function RacingGame() {
       // ---------- Weather + visual FX ----------
       // Rain — fall + follow camera
       if (rainPoints && rainPositions) {
-        const cx = camera.position.x, cz = camera.position.z;
-        const fall = 110 * dt * (W.rain > 1 ? 1.4 : 1);
-        for (let i = 0; i < rainPositions.length; i += 3) {
-          rainPositions[i + 1] -= fall;
-          if (rainPositions[i + 1] < 0) {
-            rainPositions[i + 1] = 80 + Math.random() * 20;
-            rainPositions[i + 0] = cx + (Math.random() - 0.5) * 240;
-            rainPositions[i + 2] = cz + (Math.random() - 0.5) * 240;
+        // Dynamic intensity from live wetness (0 dry → 1 storm).
+        const intensity = Math.max(W.wet ? 0.6 : 0, weatherSnap.wetness);
+        rainPoints.visible = intensity > 0.05;
+        if (rainMat) rainMat.opacity = Math.min(0.75, intensity * 0.8);
+        if (rainPoints.visible) {
+          const cx = camera.position.x, cz = camera.position.z;
+          const fall = 110 * dt * (0.6 + intensity * 0.9);
+          for (let i = 0; i < rainPositions.length; i += 3) {
+            rainPositions[i + 1] -= fall;
+            if (rainPositions[i + 1] < 0) {
+              rainPositions[i + 1] = 80 + Math.random() * 20;
+              rainPositions[i + 0] = cx + (Math.random() - 0.5) * 240;
+              rainPositions[i + 2] = cz + (Math.random() - 0.5) * 240;
+            }
           }
+          (rainPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
         }
-        (rainPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
       }
 
       // Lightning
