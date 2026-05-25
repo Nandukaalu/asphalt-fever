@@ -1686,8 +1686,11 @@ export default function RacingGame() {
     // ----- Rain particles -----
     let rainPoints: THREE.Points | null = null;
     let rainPositions: Float32Array | null = null;
-    const RAIN_COUNT = W.rain > 0 ? Math.floor(1500 * Math.min(W.rain, 1.5)) : 0;
-    if (RAIN_COUNT > 0) {
+    // Always allocate a rain buffer so dynamic weather can fade rain in
+    // mid-race even when the session started dry.
+    const RAIN_COUNT = 1800;
+    let rainMat: THREE.PointsMaterial | null = null;
+    {
       rainPositions = new Float32Array(RAIN_COUNT * 3);
       for (let i = 0; i < RAIN_COUNT; i++) {
         rainPositions[i * 3 + 0] = (Math.random() - 0.5) * 280;
@@ -1696,11 +1699,12 @@ export default function RacingGame() {
       }
       const rg = new THREE.BufferGeometry();
       rg.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
-      const rm = new THREE.PointsMaterial({
+      rainMat = new THREE.PointsMaterial({
         color: 0xb8d8ff, size: 0.55, transparent: true,
-        opacity: 0.55, depthWrite: false,
+        opacity: 0, depthWrite: false,
       });
-      rainPoints = new THREE.Points(rg, rm);
+      rainPoints = new THREE.Points(rg, rainMat);
+      rainPoints.visible = false;
       scene.add(rainPoints);
     }
 
@@ -1788,7 +1792,7 @@ export default function RacingGame() {
     };
     const MAX_SPEED_PREVIEW = 78;
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
-    const ais: (AI & { driver: Driver; offset: number })[] = [];
+    const ais: (AI & { driver: Driver; offset: number; firstCross: boolean })[] = [];
     if (!isMulti) {
       // Order AI by qualifying grid (skip player); fall back to default order.
       const ordered = qGrid && qGrid.length
@@ -1806,7 +1810,7 @@ export default function RacingGame() {
         const lateral = (slot % 2 === 0 ? 1 : -1) * GRID_LAT;
         ais.push({
           car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral,
-          lap: 1, lapStart: 0, lastLap: 0, bestLap: 0, prevT: g.t,
+          lap: 1, lapStart: 0, lastLap: 0, bestLap: 0, prevT: g.t, firstCross: false,
         });
       });
     }
@@ -2331,11 +2335,18 @@ export default function RacingGame() {
         if (ai.t >= 1) ai.t -= 1;
         // Lap wrap detection (t crosses 1->0)
         if (ai.prevT > 0.9 && ai.t < 0.1) {
-          const lt = (now - ai.lapStart) / 1000;
-          ai.lastLap = lt;
-          if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
-          ai.lapStart = now;
-          ai.lap++;
+          if (!ai.firstCross) {
+            // First crossing only arms the AI's lap timer — the partial
+            // grid-to-line distance does NOT count as a flying lap.
+            ai.firstCross = true;
+            ai.lapStart = now;
+          } else {
+            const lt = (now - ai.lapStart) / 1000;
+            ai.lastLap = lt;
+            if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
+            ai.lapStart = now;
+            ai.lap++;
+          }
         }
         ai.prevT = ai.t;
         const ap = curve.getPointAt(ai.t);
@@ -2483,17 +2494,23 @@ export default function RacingGame() {
       // ---------- Weather + visual FX ----------
       // Rain — fall + follow camera
       if (rainPoints && rainPositions) {
-        const cx = camera.position.x, cz = camera.position.z;
-        const fall = 110 * dt * (W.rain > 1 ? 1.4 : 1);
-        for (let i = 0; i < rainPositions.length; i += 3) {
-          rainPositions[i + 1] -= fall;
-          if (rainPositions[i + 1] < 0) {
-            rainPositions[i + 1] = 80 + Math.random() * 20;
-            rainPositions[i + 0] = cx + (Math.random() - 0.5) * 240;
-            rainPositions[i + 2] = cz + (Math.random() - 0.5) * 240;
+        // Dynamic intensity from live wetness (0 dry → 1 storm).
+        const intensity = Math.max(W.wet ? 0.6 : 0, weatherSnap.wetness);
+        rainPoints.visible = intensity > 0.05;
+        if (rainMat) rainMat.opacity = Math.min(0.75, intensity * 0.8);
+        if (rainPoints.visible) {
+          const cx = camera.position.x, cz = camera.position.z;
+          const fall = 110 * dt * (0.6 + intensity * 0.9);
+          for (let i = 0; i < rainPositions.length; i += 3) {
+            rainPositions[i + 1] -= fall;
+            if (rainPositions[i + 1] < 0) {
+              rainPositions[i + 1] = 80 + Math.random() * 20;
+              rainPositions[i + 0] = cx + (Math.random() - 0.5) * 240;
+              rainPositions[i + 2] = cz + (Math.random() - 0.5) * 240;
+            }
           }
+          (rainPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
         }
-        (rainPoints.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
       }
 
       // Lightning
@@ -2602,11 +2619,11 @@ export default function RacingGame() {
           });
         } else {
           ais.forEach((ai) => {
-            const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+            const aiProg = Math.max(0, (ai.lap - 1) + ai.t);
             rows.push({
               id: ai.driver.id, name: ai.driver.name, team: ai.driver.team,
               color: toHex(ai.driver.primary), number: ai.driver.number,
-              progress: aiLapEst + ai.t,
+              progress: aiProg,
               lap: Math.min(totalLaps, ai.lap),
               lastLap: ai.lastLap > 0 ? ai.lastLap : undefined,
               bestLap: ai.bestLap > 0 ? ai.bestLap : undefined,
@@ -2745,8 +2762,8 @@ export default function RacingGame() {
           let dropped = 0;
           if (!isMulti) {
             ais.forEach((ai) => {
-              const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
-              if ((aiLapEst + ai.t) > playerProgPenalised && (aiLapEst + ai.t) <= raceProgress) dropped += 1;
+              const aiProg = Math.max(0, (ai.lap - 1) + ai.t);
+              if (aiProg > playerProgPenalised && aiProg <= raceProgress) dropped += 1;
             });
           }
           adjustedPosition = Math.min(10, position + dropped);
@@ -2798,8 +2815,10 @@ export default function RacingGame() {
           });
         } else {
           ais.forEach((ai) => {
-            const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
-            standingsList.push({ id: ai.driver.id, prog: aiLapEst + ai.t });
+            // Use the AI's own lap counter (firstCross-armed) so race finishing
+            // order reflects actual distance covered, not a player-relative guess.
+            const aiProg = Math.max(0, (ai.lap - 1) + ai.t);
+            standingsList.push({ id: ai.driver.id, prog: aiProg });
           });
         }
         standingsList.sort((a, b) => b.prog - a.prog);
