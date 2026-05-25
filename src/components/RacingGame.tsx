@@ -2609,11 +2609,11 @@ export default function RacingGame() {
           });
         } else {
           ais.forEach((ai) => {
-            const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
+            const aiProg = Math.max(0, (ai.lap - 1) + ai.t);
             rows.push({
               id: ai.driver.id, name: ai.driver.name, team: ai.driver.team,
               color: toHex(ai.driver.primary), number: ai.driver.number,
-              progress: aiLapEst + ai.t,
+              progress: aiProg,
               lap: Math.min(totalLaps, ai.lap),
               lastLap: ai.lastLap > 0 ? ai.lastLap : undefined,
               bestLap: ai.bestLap > 0 ? ai.bestLap : undefined,
@@ -2752,8 +2752,8 @@ export default function RacingGame() {
           let dropped = 0;
           if (!isMulti) {
             ais.forEach((ai) => {
-              const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
-              if ((aiLapEst + ai.t) > playerProgPenalised && (aiLapEst + ai.t) <= raceProgress) dropped += 1;
+              const aiProg = Math.max(0, (ai.lap - 1) + ai.t);
+              if (aiProg > playerProgPenalised && aiProg <= raceProgress) dropped += 1;
             });
           }
           adjustedPosition = Math.min(10, position + dropped);
