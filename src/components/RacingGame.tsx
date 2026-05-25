@@ -1788,7 +1788,7 @@ export default function RacingGame() {
     };
     const MAX_SPEED_PREVIEW = 78;
     const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
-    const ais: (AI & { driver: Driver; offset: number })[] = [];
+    const ais: (AI & { driver: Driver; offset: number; firstCross: boolean })[] = [];
     if (!isMulti) {
       // Order AI by qualifying grid (skip player); fall back to default order.
       const ordered = qGrid && qGrid.length
@@ -1806,7 +1806,7 @@ export default function RacingGame() {
         const lateral = (slot % 2 === 0 ? 1 : -1) * GRID_LAT;
         ais.push({
           car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral,
-          lap: 1, lapStart: 0, lastLap: 0, bestLap: 0, prevT: g.t,
+          lap: 1, lapStart: 0, lastLap: 0, bestLap: 0, prevT: g.t, firstCross: false,
         });
       });
     }
