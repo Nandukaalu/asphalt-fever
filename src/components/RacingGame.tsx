@@ -2805,8 +2805,10 @@ export default function RacingGame() {
           });
         } else {
           ais.forEach((ai) => {
-            const aiLapEst = Math.floor(raceProgress) + (ai.t < playerLapFrac - 0.5 ? 1 : ai.t > playerLapFrac + 0.5 ? -1 : 0);
-            standingsList.push({ id: ai.driver.id, prog: aiLapEst + ai.t });
+            // Use the AI's own lap counter (firstCross-armed) so race finishing
+            // order reflects actual distance covered, not a player-relative guess.
+            const aiProg = Math.max(0, (ai.lap - 1) + ai.t);
+            standingsList.push({ id: ai.driver.id, prog: aiProg });
           });
         }
         standingsList.sort((a, b) => b.prog - a.prog);
