@@ -94,6 +94,10 @@ export function createWeatherEvolution(startId: string): WeatherEvolution {
   let vis = phaseTargets(phase).vis;
   let dryLine = phase === "dry" ? 1 : 0;
   let firedWarn = new Set<number>();
+  let preAnnounced = new Set<number>();
+
+  const wetterThan = (a: WeatherPhase, b: WeatherPhase) =>
+    phaseTargets(a).wet > phaseTargets(b).wet + 0.05;
 
   const current = (): WeatherSnapshot => ({
     phase, wetness: wet, visibility: vis, dryLine,
@@ -102,23 +106,45 @@ export function createWeatherEvolution(startId: string): WeatherEvolution {
 
   const step: WeatherEvolution["step"] = (dt, raceProgress, totalLaps) => {
     const frac = totalLaps > 0 ? Math.min(1, raceProgress / totalLaps) : 0;
+    const lapSpan = totalLaps > 0 ? 1 / totalLaps : 0.2;
+
+    // Pre-announce the NEXT scripted phase ~1 lap before it actually flips,
+    // so the engineer's "rain in 1 lap" lines up with the real change.
+    for (let i = 0; i < script.length; i++) {
+      const s = script[i];
+      if (preAnnounced.has(i)) continue;
+      const lead = s.atProgress - lapSpan;
+      if (frac >= lead && frac < s.atProgress) {
+        preAnnounced.add(i);
+        if (wetterThan(s.phase, phase)) {
+          if (s.phase === "storm") maybeSay(`pre:${i}`, ENGINEER_LINES.rainHeavier(), "warn", 1000, 4200);
+          else maybeSay(`pre:${i}`, ENGINEER_LINES.rainSoon(1), "warn", 1000, 4200);
+        } else if (s.phase === "drying" || s.phase === "dry") {
+          maybeSay(`pre:${i}`, ENGINEER_LINES.rainEasing(), "good", 1000, 4200);
+        }
+      }
+    }
+
     // Find latest scripted phase whose threshold has passed
     let active = script[0];
     for (let i = 0; i < script.length; i++) {
       if (frac >= script[i].atProgress) active = script[i];
     }
     if (active.phase !== phase) {
+      const prev = phase;
       phase = active.phase;
-      // fire warning once per phase change
+      // Fire "it's happening now" callouts that match the new state.
       const idx = script.indexOf(active);
-      if (active.warn && !firedWarn.has(idx)) {
-        firedWarn.add(idx);
-        maybeSay(`weather:${idx}`, active.warn, "warn", 1000, 4200);
-      }
-      if (phase === "storm") maybeSay("weather:storm", ENGINEER_LINES.thunder(), "alert", 1000, 4200);
-      if (phase === "fog") maybeSay("weather:fog", ENGINEER_LINES.fogIn(), "warn", 1000, 4200);
-      if (phase === "drizzle" && active.warn === undefined) {
-        maybeSay("weather:drizzle", ENGINEER_LINES.rainNow(), "warn", 1000, 4200);
+      firedWarn.add(idx);
+      if (phase === "storm") {
+        maybeSay("weather:storm", ENGINEER_LINES.thunder(), "alert", 1000, 4200);
+      } else if (phase === "rain" || phase === "drizzle") {
+        if (wetterThan(phase, prev)) maybeSay(`now:${idx}`, ENGINEER_LINES.rainNow(), "warn", 1000, 4200);
+        else maybeSay(`now:${idx}`, ENGINEER_LINES.rainEasing(), "good", 1000, 4200);
+      } else if (phase === "fog") {
+        maybeSay("weather:fog", ENGINEER_LINES.fogIn(), "warn", 1000, 4200);
+      } else if (phase === "drying" || phase === "dry") {
+        maybeSay(`now:${idx}`, ENGINEER_LINES.dryingUp(), "good", 1000, 4200);
       }
     }
     // Smoothly ease toward target wetness / visibility
