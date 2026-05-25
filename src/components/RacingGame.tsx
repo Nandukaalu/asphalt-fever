@@ -2331,11 +2331,18 @@ export default function RacingGame() {
         if (ai.t >= 1) ai.t -= 1;
         // Lap wrap detection (t crosses 1->0)
         if (ai.prevT > 0.9 && ai.t < 0.1) {
-          const lt = (now - ai.lapStart) / 1000;
-          ai.lastLap = lt;
-          if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
-          ai.lapStart = now;
-          ai.lap++;
+          if (!ai.firstCross) {
+            // First crossing only arms the AI's lap timer — the partial
+            // grid-to-line distance does NOT count as a flying lap.
+            ai.firstCross = true;
+            ai.lapStart = now;
+          } else {
+            const lt = (now - ai.lapStart) / 1000;
+            ai.lastLap = lt;
+            if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
+            ai.lapStart = now;
+            ai.lap++;
+          }
         }
         ai.prevT = ai.t;
         const ap = curve.getPointAt(ai.t);
