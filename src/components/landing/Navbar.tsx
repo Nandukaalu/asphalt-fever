@@ -46,6 +46,12 @@ export default function Navbar() {
             Garage
           </Link>
           <Link
+            to="/freeroam"
+            className="hidden sm:inline-flex tap-target px-4 items-center rounded-full glass text-xs font-display uppercase tracking-widest hover:shadow-cyan transition-all"
+          >
+            Free Roam
+          </Link>
+          <Link
             to="/customize"
             className="hidden sm:inline-flex tap-target px-4 items-center rounded-full glass text-xs font-display uppercase tracking-widest hover:shadow-cyan transition-all"
           >
@@ -84,6 +90,12 @@ export default function Navbar() {
               className="tap-target px-3 flex items-center rounded-lg hover:bg-secondary font-display uppercase tracking-widest text-sm"
             >
               Garage
+            </Link>
+            <Link
+              to="/freeroam"
+              className="tap-target px-3 flex items-center rounded-lg hover:bg-secondary font-display uppercase tracking-widest text-sm"
+            >
+              Free Roam
             </Link>
             <Link
               to="/customize"
