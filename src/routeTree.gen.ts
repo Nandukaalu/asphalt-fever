@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PlayRouteImport } from './routes/play'
 import { Route as GarageRouteImport } from './routes/garage'
+import { Route as FreeroamRouteImport } from './routes/freeroam'
 import { Route as CustomizeRouteImport } from './routes/customize'
 import { Route as ChampionshipRouteImport } from './routes/championship'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -24,6 +25,11 @@ const PlayRoute = PlayRouteImport.update({
 const GarageRoute = GarageRouteImport.update({
   id: '/garage',
   path: '/garage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FreeroamRoute = FreeroamRouteImport.update({
+  id: '/freeroam',
+  path: '/freeroam',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CustomizeRoute = CustomizeRouteImport.update({
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/championship': typeof ChampionshipRoute
   '/customize': typeof CustomizeRoute
+  '/freeroam': typeof FreeroamRoute
   '/garage': typeof GarageRoute
   '/play': typeof PlayRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/championship': typeof ChampionshipRoute
   '/customize': typeof CustomizeRoute
+  '/freeroam': typeof FreeroamRoute
   '/garage': typeof GarageRoute
   '/play': typeof PlayRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/championship': typeof ChampionshipRoute
   '/customize': typeof CustomizeRoute
+  '/freeroam': typeof FreeroamRoute
   '/garage': typeof GarageRoute
   '/play': typeof PlayRoute
 }
@@ -79,16 +88,25 @@ export interface FileRouteTypes {
     | '/auth'
     | '/championship'
     | '/customize'
+    | '/freeroam'
     | '/garage'
     | '/play'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/championship' | '/customize' | '/garage' | '/play'
+  to:
+    | '/'
+    | '/auth'
+    | '/championship'
+    | '/customize'
+    | '/freeroam'
+    | '/garage'
+    | '/play'
   id:
     | '__root__'
     | '/'
     | '/auth'
     | '/championship'
     | '/customize'
+    | '/freeroam'
     | '/garage'
     | '/play'
   fileRoutesById: FileRoutesById
@@ -98,6 +116,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ChampionshipRoute: typeof ChampionshipRoute
   CustomizeRoute: typeof CustomizeRoute
+  FreeroamRoute: typeof FreeroamRoute
   GarageRoute: typeof GarageRoute
   PlayRoute: typeof PlayRoute
 }
@@ -116,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/garage'
       fullPath: '/garage'
       preLoaderRoute: typeof GarageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/freeroam': {
+      id: '/freeroam'
+      path: '/freeroam'
+      fullPath: '/freeroam'
+      preLoaderRoute: typeof FreeroamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/customize': {
@@ -154,9 +180,20 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ChampionshipRoute: ChampionshipRoute,
   CustomizeRoute: CustomizeRoute,
+  FreeroamRoute: FreeroamRoute,
   GarageRoute: GarageRoute,
   PlayRoute: PlayRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
