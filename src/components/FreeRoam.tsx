@@ -357,6 +357,69 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
     let inTimeTrial = false;
     let fpsSamples: number[] = [];
     let raf = 0;
+    // Crash / stability state
+    let controlLoss = 0;          // 0..1, decays over time, reduces steering authority
+    let yawSpin = 0;              // angular velocity from impact (rad/s)
+    let scrapeT = 0;              // continuous wall-scrape timer, drives sparks/smoke spawn
+    let camShake = 0;             // 0..1
+
+    /* ---------- crash FX pools (sparks + smoke) ---------- */
+    const SPARK_N = 80;
+    const sparkGeo = new THREE.BufferGeometry();
+    const sparkPos = new Float32Array(SPARK_N * 3);
+    const sparkVel = new Float32Array(SPARK_N * 3);
+    const sparkLife = new Float32Array(SPARK_N); // seconds remaining
+    for (let i = 0; i < SPARK_N; i++) { sparkPos[i*3+1] = -1000; }
+    sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPos, 3));
+    const sparkMat = new THREE.PointsMaterial({
+      color: 0xffcc66, size: 0.45, transparent: true, opacity: 0.95,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const sparks = new THREE.Points(sparkGeo, sparkMat);
+    scene.add(sparks);
+
+    const SMOKE_N = 60;
+    const smokeGeo = new THREE.BufferGeometry();
+    const smokePos = new Float32Array(SMOKE_N * 3);
+    const smokeVel = new Float32Array(SMOKE_N * 3);
+    const smokeLife = new Float32Array(SMOKE_N);
+    const smokeMax = new Float32Array(SMOKE_N);
+    for (let i = 0; i < SMOKE_N; i++) { smokePos[i*3+1] = -1000; }
+    smokeGeo.setAttribute("position", new THREE.BufferAttribute(smokePos, 3));
+    const smokeMat = new THREE.PointsMaterial({
+      color: 0xcccccc, size: 2.2, transparent: true, opacity: 0.55, depthWrite: false,
+    });
+    const smoke = new THREE.Points(smokeGeo, smokeMat);
+    scene.add(smoke);
+
+    const emitSparks = (x: number, z: number, count: number, dirX: number, dirZ: number) => {
+      let emitted = 0;
+      for (let i = 0; i < SPARK_N && emitted < count; i++) {
+        if (sparkLife[i] > 0) continue;
+        sparkPos[i*3+0] = x; sparkPos[i*3+1] = 0.6; sparkPos[i*3+2] = z;
+        const spread = 0.7;
+        sparkVel[i*3+0] = dirX * (4 + Math.random()*8) + (Math.random()-0.5)*spread*6;
+        sparkVel[i*3+1] = 2 + Math.random()*5;
+        sparkVel[i*3+2] = dirZ * (4 + Math.random()*8) + (Math.random()-0.5)*spread*6;
+        sparkLife[i] = 0.35 + Math.random()*0.35;
+        emitted++;
+      }
+      (sparkGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    };
+    const emitSmoke = (x: number, z: number, count: number) => {
+      let emitted = 0;
+      for (let i = 0; i < SMOKE_N && emitted < count; i++) {
+        if (smokeLife[i] > 0) continue;
+        smokePos[i*3+0] = x; smokePos[i*3+1] = 0.5; smokePos[i*3+2] = z;
+        smokeVel[i*3+0] = (Math.random()-0.5) * 1.5;
+        smokeVel[i*3+1] = 0.4 + Math.random() * 0.6;
+        smokeVel[i*3+2] = (Math.random()-0.5) * 1.5;
+        smokeLife[i] = 0.9 + Math.random() * 0.8;
+        smokeMax[i] = smokeLife[i];
+        emitted++;
+      }
+      (smokeGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    };
 
     const setAct = (msg: string, ms = 2500) => {
       activityMsg = msg;
