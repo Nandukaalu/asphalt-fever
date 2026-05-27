@@ -1875,6 +1875,8 @@ export default function RacingGame() {
     let bodyPitch = 0;        // visual pitch (accel/brake)
     let bodyRoll = 0;         // visual roll (cornering)
     let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
+    let impactControlLoss = 0; // 0..1 reduces steering authority briefly after a hit
+    let postImpactSpin = 0;    // rad/s residual yaw from impact
 
 
     // ---------- Pit-stop session state ----------
