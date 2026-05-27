@@ -677,8 +677,12 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       const camH = 3.5;
       const camX = playerCar.position.x - Math.sin(yaw) * camDist;
       const camZ = playerCar.position.z - Math.cos(yaw) * camDist;
-      camera.position.lerp(new THREE.Vector3(camX, camH, camZ), 0.15);
+      const shake = camShake;
+      const sX = (Math.random() - 0.5) * shake * 0.6;
+      const sY = (Math.random() - 0.5) * shake * 0.4;
+      camera.position.lerp(new THREE.Vector3(camX + sX, camH + sY, camZ + sX), 0.15);
       camera.lookAt(playerCar.position.x, 1, playerCar.position.z);
+      camShake *= Math.pow(0.02, dt);
 
       /* ----- MP broadcast (10 Hz) ----- */
       if (channel && now - lastBroadcast > 100) {
