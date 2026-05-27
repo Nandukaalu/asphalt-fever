@@ -510,8 +510,13 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       if (speed < -maxSpeed * 0.35) speed = -maxSpeed * 0.35;
 
       const steerEff = Math.max(-1, Math.min(1, steerIn));
-      const steerRate = car.handling * 1.4 * gripMul;
+      const steerAuthority = Math.max(0.2, 1 - controlLoss * 0.7);
+      const steerRate = car.handling * 1.4 * gripMul * steerAuthority;
       yaw -= steerEff * steerRate * dt * (Math.abs(speed) / Math.max(8, maxSpeed * 0.4));
+      // post-impact spin
+      yaw += yawSpin * dt;
+      yawSpin *= Math.pow(0.05, dt); // decay fast
+      controlLoss *= Math.pow(0.25, dt);
       playerCar.rotation.y = yaw;
 
       const dx = Math.sin(yaw) * speed * dt;
@@ -519,24 +524,113 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       const nx = playerCar.position.x + dx;
       const nz = playerCar.position.z + dz;
 
-      // collision check vs static colliders (AABB)
+      // ===== Realistic collision resolution =====
+      // Find first overlapping AABB (static or traffic), compute minimum-penetration
+      // axis as wall normal, push out along it, decompose velocity into normal +
+      // tangential. Normal component is killed (no rubber bounce), tangential
+      // component is preserved with friction → car scrapes/slides along the wall.
       const carRX = 1.1, carRZ = 2.4;
-      let hit = false;
+      type Box = { x: number; z: number; rx: number; rz: number };
+      let hitBox: Box | null = null;
       for (const c of colliders) {
-        if (Math.abs(nx - c.x) < carRX + c.rx && Math.abs(nz - c.z) < carRZ + c.rz) { hit = true; break; }
+        if (Math.abs(nx - c.x) < carRX + c.rx && Math.abs(nz - c.z) < carRZ + c.rz) { hitBox = c; break; }
       }
-      // collision vs traffic
-      if (!hit) {
+      if (!hitBox) {
         for (const tr of traffic) {
-          if (Math.abs(nx - tr.mesh.position.x) < carRX + tr.bounds.rx && Math.abs(nz - tr.mesh.position.z) < carRZ + tr.bounds.rz) { hit = true; break; }
+          if (Math.abs(nx - tr.mesh.position.x) < carRX + tr.bounds.rx && Math.abs(nz - tr.mesh.position.z) < carRZ + tr.bounds.rz) {
+            hitBox = { x: tr.mesh.position.x, z: tr.mesh.position.z, rx: tr.bounds.rx, rz: tr.bounds.rz };
+            break;
+          }
         }
       }
-      if (hit) {
-        speed *= -0.35; // bounce back
+      if (hitBox) {
+        const penX = (carRX + hitBox.rx) - Math.abs(nx - hitBox.x);
+        const penZ = (carRZ + hitBox.rz) - Math.abs(nz - hitBox.z);
+        const sx = Math.sign(nx - hitBox.x) || 1;
+        const sz = Math.sign(nz - hitBox.z) || 1;
+        let nrmX = 0, nrmZ = 0;
+        if (penX < penZ) {
+          // resolve along X — slide along Z
+          playerCar.position.x = hitBox.x + sx * (carRX + hitBox.rx + 0.001);
+          playerCar.position.z = nz;
+          nrmX = sx;
+        } else {
+          playerCar.position.z = hitBox.z + sz * (carRZ + hitBox.rz + 0.001);
+          playerCar.position.x = nx;
+          nrmZ = sz;
+        }
+        // Velocity vector in world space (forward only — no lateral state in FR sim)
+        const vx = Math.sin(yaw) * speed;
+        const vz = Math.cos(yaw) * speed;
+        const vDotN = vx * nrmX + vz * nrmZ;        // signed normal speed (negative = into wall)
+        const intoWall = Math.max(0, -vDotN);        // m/s of head-on closure
+        const absSpeed = Math.abs(speed);
+        const headOn = absSpeed > 0.1 ? intoWall / absSpeed : 0; // 0 glancing .. 1 head-on
+        const massFactor = car.weight / 1500;        // heavier = carries more momentum
+        // Energy loss: head-on hits bleed most of the speed; glancing barely slows
+        // High speeds bleed proportionally (no bouncing at 500 kph — just heavy slowdown)
+        const headOnLoss = headOn * (0.45 + Math.min(0.45, intoWall / 60)) / Math.max(0.7, massFactor * 0.6 + 0.5);
+        const scrapeLoss = (1 - headOn) * 0.18 * (1 + intoWall / 80); // tangential friction
+        speed *= Math.max(0, 1 - headOnLoss - scrapeLoss * dt * 8);
+        // No rebound. Cars don't bounce off walls — they scrape and slow.
+        // Tiny separation impulse only for very low-speed wedged contacts.
+        if (intoWall < 1.5 && absSpeed < 3) speed *= 0.5;
+        // Post-impact instability
+        const severity = headOn * Math.min(1, intoWall / 30);
+        controlLoss = Math.min(1, controlLoss + severity * 0.9);
+        yawSpin += (Math.random() - 0.5) * severity * 2.4;
+        camShake = Math.max(camShake, severity);
+        // FX — sparks for any contact (scrape), smoke for harder hits
+        const contactX = playerCar.position.x - nrmX * carRX;
+        const contactZ = playerCar.position.z - nrmZ * carRZ;
+        const sparkCount = Math.min(12, 2 + Math.round(intoWall * 0.6));
+        if (sparkCount > 0 && absSpeed > 4) emitSparks(contactX, contactZ, sparkCount, -nrmX, -nrmZ);
+        if (intoWall > 8) emitSmoke(contactX, contactZ, Math.min(6, 1 + Math.round(intoWall / 8)));
+        scrapeT = 0.15;
       } else {
         playerCar.position.x = nx;
         playerCar.position.z = nz;
       }
+
+      // Continuous scrape — light sparks while still touching a wall
+      scrapeT = Math.max(0, scrapeT - dt);
+
+      // Hard braking smoke (locked-up tires)
+      if (brakeIn > 0 && Math.abs(speed) > 18) {
+        if (Math.random() < dt * 12) {
+          const back = -2.0;
+          emitSmoke(
+            playerCar.position.x + Math.sin(yaw) * back + (Math.random()-0.5),
+            playerCar.position.z + Math.cos(yaw) * back + (Math.random()-0.5),
+            1,
+          );
+        }
+      }
+
+      // Update spark + smoke particle systems
+      const GRAV = 14;
+      for (let i = 0; i < SPARK_N; i++) {
+        if (sparkLife[i] <= 0) continue;
+        sparkLife[i] -= dt;
+        if (sparkLife[i] <= 0) { sparkPos[i*3+1] = -1000; continue; }
+        sparkVel[i*3+1] -= GRAV * dt;
+        sparkPos[i*3+0] += sparkVel[i*3+0] * dt;
+        sparkPos[i*3+1] += sparkVel[i*3+1] * dt;
+        sparkPos[i*3+2] += sparkVel[i*3+2] * dt;
+        if (sparkPos[i*3+1] < 0.05) { sparkVel[i*3+1] *= -0.3; sparkPos[i*3+1] = 0.05; sparkVel[i*3+0] *= 0.6; sparkVel[i*3+2] *= 0.6; }
+      }
+      (sparkGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      for (let i = 0; i < SMOKE_N; i++) {
+        if (smokeLife[i] <= 0) continue;
+        smokeLife[i] -= dt;
+        if (smokeLife[i] <= 0) { smokePos[i*3+1] = -1000; continue; }
+        smokePos[i*3+0] += smokeVel[i*3+0] * dt;
+        smokePos[i*3+1] += smokeVel[i*3+1] * dt;
+        smokePos[i*3+2] += smokeVel[i*3+2] * dt;
+        smokeVel[i*3+0] *= Math.pow(0.4, dt);
+        smokeVel[i*3+2] *= Math.pow(0.4, dt);
+      }
+      (smokeGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
 
       // traffic update
       for (const tr of traffic) {
@@ -583,8 +677,12 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       const camH = 3.5;
       const camX = playerCar.position.x - Math.sin(yaw) * camDist;
       const camZ = playerCar.position.z - Math.cos(yaw) * camDist;
-      camera.position.lerp(new THREE.Vector3(camX, camH, camZ), 0.15);
+      const shake = camShake;
+      const sX = (Math.random() - 0.5) * shake * 0.6;
+      const sY = (Math.random() - 0.5) * shake * 0.4;
+      camera.position.lerp(new THREE.Vector3(camX + sX, camH + sY, camZ + sX), 0.15);
       camera.lookAt(playerCar.position.x, 1, playerCar.position.z);
+      camShake *= Math.pow(0.02, dt);
 
       /* ----- MP broadcast (10 Hz) ----- */
       if (channel && now - lastBroadcast > 100) {

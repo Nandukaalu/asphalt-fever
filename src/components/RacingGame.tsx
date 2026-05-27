@@ -1875,6 +1875,8 @@ export default function RacingGame() {
     let bodyPitch = 0;        // visual pitch (accel/brake)
     let bodyRoll = 0;         // visual roll (cornering)
     let camTrauma = 0;        // adds to shake (impacts, hydroplaning)
+    let impactControlLoss = 0; // 0..1 reduces steering authority briefly after a hit
+    let postImpactSpin = 0;    // rad/s residual yaw from impact
 
 
     // ---------- Pit-stop session state ----------
@@ -2204,9 +2206,12 @@ export default function RacingGame() {
 
       // Heading + lateral slide physics (classic feel)
       const speedFactor = Math.min(1, Math.abs(speed) / 12);
-      const turnRate = STEER_RATE * gripNow * speedFactor * (speed >= 0 ? 1 : -1);
+      const steerAuthority = Math.max(0.25, 1 - impactControlLoss * 0.7);
+      const turnRate = STEER_RATE * gripNow * speedFactor * steerAuthority * (speed >= 0 ? 1 : -1);
       const dHeading = steering * turnRate * dt;
-      heading += dHeading;
+      heading += dHeading + postImpactSpin * dt;
+      postImpactSpin *= Math.pow(0.05, dt);
+      impactControlLoss *= Math.pow(0.25, dt);
       const lateralAccel = -dHeading * speed * (0.6 + (1 - gripNow) * 0.45);
       lateralVel += lateralAccel;
       lateralVel *= Math.pow(Math.max(0.04, 0.16 + (1 - gripNow) * 0.55), dt);
@@ -2217,7 +2222,11 @@ export default function RacingGame() {
       carPos.x += fx * speed * dt + sx * lateralVel * dt;
       carPos.z += fz * speed * dt + sz * lateralVel * dt;
 
-      // Wall collision: push back inside, lose speed
+      // ===== Wall collision — realistic momentum, no rubber bounce =====
+      // Wall normal points from the centerline outward to the car position.
+      // Decompose forward + lateral velocity onto normal/tangent; kill normal
+      // component (no bounce), apply friction to tangent, scale loss with how
+      // head-on the impact is. Heavier cars / faster impacts bleed more energy.
       const ct2 = closestT(carPos);
       const inPitLaneAfterMove = isInPitLane(carPos);
       if (!inPit && !inPitLaneAfterMove && ct2.dist > WALL_LIMIT) {
@@ -2225,17 +2234,51 @@ export default function RacingGame() {
         const dx = carPos.x - center.x;
         const dz = carPos.z - center.z;
         const len = Math.sqrt(dx * dx + dz * dz) || 1;
-        const nx = dx / len, nz = dz / len;
+        const nx = dx / len, nz = dz / len;        // wall outward normal
+        // Push back to surface
         carPos.x = center.x + nx * WALL_LIMIT;
         carPos.z = center.z + nz * WALL_LIMIT;
-        const impact = Math.min(1, Math.abs(speed) / MAX_SPEED);
-        speed *= 0.88 - impact * 0.05;
-        lateralVel *= -0.25;
-        // Sparks while scraping
-        for (let s = 0; s < 4; s++) {
+        // Build world-space velocity from forward + lateral
+        const fxw = Math.sin(heading), fzw = Math.cos(heading);
+        const sxw = Math.cos(heading), szw = -Math.sin(heading);
+        const vx = fxw * speed + sxw * lateralVel;
+        const vz = fzw * speed + szw * lateralVel;
+        const vDotN = vx * nx + vz * nz;          // outward = positive (still moving into wall)
+        const intoWall = Math.max(0, vDotN);      // m/s closure speed into the wall
+        const speedMag = Math.sqrt(vx * vx + vz * vz) || 1;
+        const headOn = intoWall / speedMag;        // 0 glancing .. 1 head-on
+        // Cancel normal component entirely (no bounce); keep tangent with friction
+        const tvx = vx - nx * vDotN;
+        const tvz = vz - nz * vDotN;
+        const friction = 0.18 + headOn * 0.15;
+        const ntvx = tvx * (1 - friction);
+        const ntvz = tvz * (1 - friction);
+        // Project back to forward/lateral relative to current heading
+        const newForward = ntvx * fxw + ntvz * fzw;
+        const newLateral = ntvx * sxw + ntvz * szw;
+        // Head-on impacts bleed extra speed (energy → deformation) — scale with closure speed
+        const headOnBleed = headOn * (0.35 + Math.min(0.45, intoWall / 35));
+        speed = newForward * (1 - headOnBleed);
+        lateralVel = newLateral * 0.6;
+        // Post-impact instability
+        const severity = headOn * Math.min(1, intoWall / 25);
+        impactControlLoss = Math.min(1, impactControlLoss + severity * 0.85);
+        postImpactSpin += (Math.random() - 0.5) * severity * 2.2;
+        camTrauma = Math.min(1.5, camTrauma + 0.4 + severity * 0.8);
+        // Sparks (always on contact) — count scales with closure speed
+        const sparkCount = Math.min(10, 2 + Math.floor(intoWall * 0.5));
+        for (let s = 0; s < sparkCount; s++) {
           spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
-            color: 0xffb648, life: 0.25 + Math.random() * 0.2, scale: 0.35, opacity: 0.9, y: 0.3,
+            color: 0xffb648, life: 0.25 + Math.random() * 0.25, scale: 0.35, opacity: 0.95, y: 0.3,
           });
+        }
+        // Smoke (heavy hits only)
+        if (intoWall > 6) {
+          for (let s = 0; s < Math.min(5, Math.floor(intoWall / 6)); s++) {
+            spawnSmoke(carPos.x + (Math.random() - 0.5) * 1.0, carPos.z + (Math.random() - 0.5) * 1.0, {
+              color: 0xbbbbbb, life: 0.8 + Math.random() * 0.6, scale: 1.2, opacity: 0.55, y: 0.5,
+            });
+          }
         }
       }
 
