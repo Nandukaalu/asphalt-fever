@@ -24,6 +24,7 @@ import {
   FASTEST_LAP_POINT as CHAMP_FL_POINT,
 } from "@/lib/championship";
 import RaceEngineerHUD from "./RaceEngineerHUD";
+import { getPreset, loadGraphicsTier } from "@/lib/graphicsSettings";
 import {
   sayEngineer,
   maybeSay,
@@ -621,9 +622,6 @@ export default function RacingGame() {
     };
 
     // Graphics quality preset scales pixel ratio, AA and shadow detail.
-    // Imported lazily to avoid touching the giant import block at the top.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { getPreset, loadGraphicsTier } = require("@/lib/graphicsSettings") as typeof import("@/lib/graphicsSettings");
     const __gfx = getPreset(loadGraphicsTier());
     const renderer = new THREE.WebGLRenderer({ antialias: __gfx.antialias, powerPreference: "high-performance" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, __gfx.pixelRatio));
