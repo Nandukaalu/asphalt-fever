@@ -24,7 +24,6 @@ import {
   FASTEST_LAP_POINT as CHAMP_FL_POINT,
 } from "@/lib/championship";
 import RaceEngineerHUD from "./RaceEngineerHUD";
-import { getPreset, loadGraphicsTier } from "@/lib/graphicsSettings";
 import {
   sayEngineer,
   maybeSay,
@@ -621,17 +620,14 @@ export default function RacingGame() {
       } catch {}
     };
 
-    // Graphics quality preset scales pixel ratio, AA and shadow detail.
-    const __gfx = getPreset(loadGraphicsTier());
-    const renderer = new THREE.WebGLRenderer({ antialias: __gfx.antialias, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, __gfx.pixelRatio));
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
-    renderer.shadowMap.enabled = __gfx.shadows;
+    renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     const W = WEATHERS.find((w) => w.id === weatherId) ?? WEATHERS[0];
-    renderer.toneMappingExposure = W.exposure * __gfx.exposure;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMappingExposure = W.exposure;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -666,8 +662,8 @@ export default function RacingGame() {
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(W.sun.color, W.sun.intensity);
     sun.position.set(W.sun.pos[0], W.sun.pos[1], W.sun.pos[2]);
-    sun.castShadow = __gfx.shadows;
-    sun.shadow.mapSize.set(__gfx.shadowMapSize, __gfx.shadowMapSize);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.left = -300;
     sun.shadow.camera.right = 300;
     sun.shadow.camera.top = 300;

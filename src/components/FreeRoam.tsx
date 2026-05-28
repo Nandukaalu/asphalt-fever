@@ -4,10 +4,6 @@ import * as THREE from "three";
 import { CARS, carById, loadSelectedCar } from "@/lib/freeroam/cars";
 import { cityById, loadSelectedCity, type CitySpec } from "@/lib/freeroam/cities";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  loadGraphicsTier, saveGraphicsTier, getPreset, TIER_LABELS,
-  type QualityTier,
-} from "@/lib/graphicsSettings";
 
 /* ---------- Types ---------- */
 type Weather = "clear" | "cloudy" | "light_rain" | "heavy_rain" | "storm" | "fog";
@@ -39,7 +35,6 @@ const WEATHER_LABEL: Record<Weather, string> = {
 /* ---------- Component ---------- */
 export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExit }: FreeRoamProps) {
   const mountRef = useRef<HTMLDivElement>(null);
-  const [tier, setTier] = useState<QualityTier>(() => loadGraphicsTier());
   const [hud, setHud] = useState({
     speed: 0, hour: 12, weather: "clear" as Weather,
     activity: "" as string, collected: 0, totalCollect: 0, peers: 0,
@@ -47,7 +42,6 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
   });
   const [paused, setPaused] = useState(false);
   const [photoMode, setPhotoMode] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const keysRef = useRef<Record<string, boolean>>({});
   const touchRef = useRef({ steer: 0, throttle: 0, brake: 0 });
 
@@ -61,71 +55,35 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
     const car = carById(carId);
     const mount = mountRef.current;
     if (!mount) return;
-    const gfx = getPreset(tier);
 
     /* ---------- renderer ---------- */
-    const renderer = new THREE.WebGLRenderer({ antialias: gfx.antialias, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, gfx.pixelRatio));
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
-    renderer.shadowMap.enabled = gfx.shadows;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = gfx.exposure;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = false;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(city.palette.sky);
-    scene.fog = new THREE.Fog(city.palette.fog, 50, 320 * gfx.fogScale);
+    scene.fog = new THREE.Fog(city.palette.fog, 50, 320);
 
     const camera = new THREE.PerspectiveCamera(70, mount.clientWidth / mount.clientHeight, 0.5, 800);
 
     /* ---------- lights ---------- */
-    // Hemisphere fills with cool sky / warm ground bounce for soft GI feel.
-    const hemi = new THREE.HemisphereLight(0xbfd6ff, 0x4a3a2a, 0.55);
-    scene.add(hemi);
-    const ambient = new THREE.AmbientLight(0xffffff, 0.18);
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambient);
-    // Warm sun, casts shadows on high/ultra
-    const sun = new THREE.DirectionalLight(0xfff1d0, 1.1);
-    sun.position.set(80, 140, 60);
-    if (gfx.shadows) {
-      sun.castShadow = true;
-      sun.shadow.mapSize.set(gfx.shadowMapSize, gfx.shadowMapSize);
-      sun.shadow.camera.left = -120;
-      sun.shadow.camera.right = 120;
-      sun.shadow.camera.top = 120;
-      sun.shadow.camera.bottom = -120;
-      sun.shadow.camera.near = 10;
-      sun.shadow.camera.far = 300;
-      sun.shadow.bias = -0.0005;
-      sun.shadow.normalBias = 0.4;
-    }
+    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    sun.position.set(60, 100, 40);
     scene.add(sun);
-    // Cool moonlight rim
-    const moonLight = new THREE.HemisphereLight(0x6080ff, 0x101020, 0.0);
+    const moonLight = new THREE.HemisphereLight(0x99bbff, 0x111122, 0.0);
     scene.add(moonLight);
-    // Lightning flash light (storms)
-    const lightning = new THREE.DirectionalLight(0xeaf2ff, 0);
-    lightning.position.set(0, 200, 0);
-    scene.add(lightning);
-    // Player headlights (spotlights at night)
-    const headL = new THREE.SpotLight(0xfff6d8, 0, 60, Math.PI / 7, 0.5, 1.5);
-    const headR = new THREE.SpotLight(0xfff6d8, 0, 60, Math.PI / 7, 0.5, 1.5);
-    if (gfx.dynamicHeadlights) {
-      headL.target = new THREE.Object3D(); headR.target = new THREE.Object3D();
-      scene.add(headL, headR, headL.target, headR.target);
-    }
 
     /* ---------- ground ---------- */
     const WORLD = 600;
     const groundGeo = new THREE.PlaneGeometry(WORLD, WORLD);
-    const groundMat = new THREE.MeshStandardMaterial({
-      color: city.palette.ground, roughness: 0.95, metalness: 0,
-    });
+    const groundMat = new THREE.MeshLambertMaterial({ color: city.palette.ground });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
-    if (gfx.shadows) ground.receiveShadow = true;
     scene.add(ground);
 
     /* ---------- procedural city ---------- */
@@ -139,22 +97,12 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
     const HALF = WORLD / 2;
 
     // Roads — two perpendicular sets of long boxes along grid lines.
-    const baseRoadColor = new THREE.Color(city.palette.road);
-    // Standard material so wet surface reflectivity reads believably.
-    const roadMat = new THREE.MeshStandardMaterial({
-      color: baseRoadColor.clone(),
-      roughness: 0.85,
-      metalness: 0.05,
-    });
+    const roadMat = new THREE.MeshLambertMaterial({ color: city.palette.road });
     for (let g = -HALF; g <= HALF; g += GRID) {
       const rH = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, ROAD_HALF * 2), roadMat);
-      rH.rotation.x = -Math.PI / 2; rH.position.set(0, 0.02, g);
-      if (gfx.shadows) rH.receiveShadow = true;
-      scene.add(rH);
+      rH.rotation.x = -Math.PI / 2; rH.position.set(0, 0.02, g); scene.add(rH);
       const rV = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_HALF * 2, WORLD), roadMat);
-      rV.rotation.x = -Math.PI / 2; rV.position.set(g, 0.02, 0);
-      if (gfx.shadows) rV.receiveShadow = true;
-      scene.add(rV);
+      rV.rotation.x = -Math.PI / 2; rV.position.set(g, 0.02, 0); scene.add(rV);
     }
     // Lane markings
     const dashMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
@@ -169,8 +117,8 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
     const colA = new THREE.Color(city.palette.buildingA);
     const colB = new THREE.Color(city.palette.buildingB);
     const accent = new THREE.Color(city.palette.accent);
-    const matA = new THREE.MeshStandardMaterial({ color: colA, roughness: 0.75, metalness: 0.1 });
-    const matB = new THREE.MeshStandardMaterial({ color: colB, roughness: 0.6, metalness: 0.2 });
+    const matA = new THREE.MeshLambertMaterial({ color: colA });
+    const matB = new THREE.MeshLambertMaterial({ color: colB });
     const windowMat = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0 });
 
     const isUrban = city.terrain === "urban" || city.terrain === "tunnel";
@@ -195,7 +143,6 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
           const mat = Math.random() > 0.5 ? matA : matB;
           const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
           b.position.set(ox, h / 2, oz);
-          if (gfx.shadows) { b.castShadow = true; b.receiveShadow = true; }
           buildingsGroup.add(b);
           colliders.push({ x: ox, z: oz, rx: w / 2 + 0.5, rz: d / 2 + 0.5 });
 
@@ -213,7 +160,7 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
     }
 
     // Guardrails along outer edge — solid barrier
-    const railMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.4, metalness: 0.6 });
+    const railMat = new THREE.MeshLambertMaterial({ color: 0xdddddd });
     for (const sign of [-1, 1]) {
       const railH = new THREE.Mesh(new THREE.BoxGeometry(WORLD, 1.2, 0.8), railMat);
       railH.position.set(0, 0.6, sign * HALF); scene.add(railH);
@@ -252,13 +199,8 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       const g = new THREE.Group();
       const body = new THREE.Color(spec.color);
       const accentCol = new THREE.Color(spec.accent);
-      // Glossy body, matte interior accent — reads as paint + carbon
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color: body, roughness: 0.28, metalness: 0.55,
-      });
-      const accentMat = new THREE.MeshStandardMaterial({
-        color: accentCol, roughness: 0.7, metalness: 0.2,
-      });
+      const bodyMat = new THREE.MeshLambertMaterial({ color: body });
+      const accentMat = new THREE.MeshLambertMaterial({ color: accentCol });
       // body shape by category
       let bw = 1.9, bh = 0.55, bl = 4.4, cabinH = 0.55, cabinL = 2.0;
       if (spec.body === "hyper") { bh = 0.4; cabinH = 0.45; bw = 2.0; bl = 4.6; }
@@ -266,49 +208,28 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       else if (spec.body === "sedan") { bh = 0.6; cabinH = 0.75; bl = 5.0; }
       else if (spec.body === "jdm") { bh = 0.55; cabinH = 0.65; }
       const hull = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bl), bodyMat);
-      hull.position.y = 0.4 + bh / 2;
-      if (gfx.shadows) { hull.castShadow = true; hull.receiveShadow = true; }
-      g.add(hull);
+      hull.position.y = 0.4 + bh / 2; g.add(hull);
       const cabin = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.85, cabinH, cabinL), accentMat);
-      cabin.position.y = 0.4 + bh + cabinH / 2; cabin.position.z = -0.2;
-      if (gfx.shadows) cabin.castShadow = true;
-      g.add(cabin);
+      cabin.position.y = 0.4 + bh + cabinH / 2; cabin.position.z = -0.2; g.add(cabin);
       // windshield strip
-      const glass = new THREE.Mesh(
-        new THREE.BoxGeometry(bw * 0.86, cabinH * 0.6, 0.05),
-        new THREE.MeshPhysicalMaterial({
-          color: 0x223344, roughness: 0.1, metalness: 0.0,
-          transmission: 0.5, transparent: true, opacity: 0.85,
-          envMapIntensity: 1.2,
-        }),
-      );
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.86, cabinH * 0.6, 0.05), new THREE.MeshBasicMaterial({ color: 0x99ccff, transparent: true, opacity: 0.6 }));
       glass.position.set(0, 0.4 + bh + cabinH / 2, -0.2 + cabinL / 2);
       g.add(glass);
       // wheels
       const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.3, 12);
-      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.85, metalness: 0.1 });
+      const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
       const wheelPos = [[-bw/2, 0.38, bl/2 - 0.7], [bw/2, 0.38, bl/2 - 0.7], [-bw/2, 0.38, -bl/2 + 0.7], [bw/2, 0.38, -bl/2 + 0.7]];
       for (const [x, y, z] of wheelPos) {
         const w = new THREE.Mesh(wheelGeo, wheelMat);
         w.rotation.z = Math.PI / 2;
         w.position.set(x, y, z);
-        if (gfx.shadows) w.castShadow = true;
         g.add(w);
       }
-      // taillights — emissive so they glow under tone-mapped exposure
-      const tailMat = new THREE.MeshStandardMaterial({
-        color: 0x330000, emissive: 0xff2222, emissiveIntensity: 1.4,
-      });
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.9, 0.1, 0.05), tailMat);
+      // taillights & headlights
+      const tail = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.9, 0.1, 0.05), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
       tail.position.set(0, 0.6, -bl / 2); g.add(tail);
-      const headMat = new THREE.MeshStandardMaterial({
-        color: 0xfff8e0, emissive: 0xfff8e0, emissiveIntensity: 0.6,
-      });
-      const head = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.9, 0.1, 0.05), headMat);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.9, 0.1, 0.05), new THREE.MeshBasicMaterial({ color: 0xffffcc }));
       head.position.set(0, 0.6, bl / 2); g.add(head);
-      (g.userData as any).tailMat = tailMat;
-      (g.userData as any).headMat = headMat;
-      (g.userData as any).bodyMat = bodyMat;
       return g;
     };
 
@@ -370,7 +291,7 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
     }
 
     /* ---------- rain ---------- */
-    const RAIN_N = gfx.rainCount;
+    const RAIN_N = 1500;
     const rainGeo = new THREE.BufferGeometry();
     const rainPos = new Float32Array(RAIN_N * 3);
     for (let i = 0; i < RAIN_N; i++) {
@@ -379,52 +300,9 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       rainPos[i * 3 + 2] = (Math.random() - 0.5) * 200;
     }
     rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
-    const rainMat = new THREE.PointsMaterial({
-      color: 0xbcd6ff, size: 0.35, transparent: true, opacity: 0, depthWrite: false,
-    });
+    const rainMat = new THREE.PointsMaterial({ color: 0xaaccff, size: 0.3, transparent: true, opacity: 0 });
     const rain = new THREE.Points(rainGeo, rainMat);
     scene.add(rain);
-
-    /* ---------- tire spray (wet roads) ---------- */
-    const SPRAY_N = gfx.tireSpray ? 80 : 0;
-    const sprayGeo = new THREE.BufferGeometry();
-    const sprayPos = new Float32Array(Math.max(1, SPRAY_N) * 3);
-    const sprayLife = new Float32Array(Math.max(1, SPRAY_N));
-    const sprayVel = new Float32Array(Math.max(1, SPRAY_N) * 3);
-    for (let i = 0; i < SPRAY_N; i++) sprayPos[i * 3 + 1] = -1000;
-    sprayGeo.setAttribute("position", new THREE.BufferAttribute(sprayPos, 3));
-    const sprayMat = new THREE.PointsMaterial({
-      color: 0xcfd8e8, size: 1.2, transparent: true, opacity: 0.5, depthWrite: false,
-    });
-    const spray = new THREE.Points(sprayGeo, sprayMat);
-    if (SPRAY_N > 0) scene.add(spray);
-
-    /* ---------- cloud shadows (scrolling dark patches) ---------- */
-    let cloudShadowMesh: THREE.Mesh | null = null;
-    if (gfx.cloudShadows) {
-      const cloudTexSize = 128;
-      const data = new Uint8Array(cloudTexSize * cloudTexSize * 4);
-      for (let i = 0; i < cloudTexSize * cloudTexSize; i++) {
-        // soft noise blobs
-        const x = (i % cloudTexSize) / cloudTexSize;
-        const y = Math.floor(i / cloudTexSize) / cloudTexSize;
-        const n = Math.sin(x * 12) * Math.sin(y * 9) + Math.sin(x * 23 + y * 7) * 0.5;
-        const v = Math.max(0, Math.min(1, 0.5 + n * 0.4));
-        const dark = Math.round(255 * (1 - v * 0.5));
-        data[i * 4 + 0] = dark; data[i * 4 + 1] = dark; data[i * 4 + 2] = dark; data[i * 4 + 3] = 90;
-      }
-      const tex = new THREE.DataTexture(data, cloudTexSize, cloudTexSize, THREE.RGBAFormat);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.repeat.set(2, 2);
-      tex.needsUpdate = true;
-      const cmat = new THREE.MeshBasicMaterial({
-        map: tex, transparent: true, opacity: 0.35, depthWrite: false,
-      });
-      cloudShadowMesh = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), cmat);
-      cloudShadowMesh.rotation.x = -Math.PI / 2;
-      cloudShadowMesh.position.y = 0.05;
-      scene.add(cloudShadowMesh);
-    }
 
     /* ---------- multiplayer peers ---------- */
     const peerMeshes = new Map<string, THREE.Group>();
@@ -486,7 +364,7 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
     let camShake = 0;             // 0..1
 
     /* ---------- crash FX pools (sparks + smoke) ---------- */
-    const SPARK_N = gfx.sparkCount;
+    const SPARK_N = 80;
     const sparkGeo = new THREE.BufferGeometry();
     const sparkPos = new Float32Array(SPARK_N * 3);
     const sparkVel = new Float32Array(SPARK_N * 3);
@@ -494,13 +372,13 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
     for (let i = 0; i < SPARK_N; i++) { sparkPos[i*3+1] = -1000; }
     sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPos, 3));
     const sparkMat = new THREE.PointsMaterial({
-      color: 0xffd07a, size: 0.5, transparent: true, opacity: 0.95,
+      color: 0xffcc66, size: 0.45, transparent: true, opacity: 0.95,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const sparks = new THREE.Points(sparkGeo, sparkMat);
     scene.add(sparks);
 
-    const SMOKE_N = gfx.smokeCount;
+    const SMOKE_N = 60;
     const smokeGeo = new THREE.BufferGeometry();
     const smokePos = new Float32Array(SMOKE_N * 3);
     const smokeVel = new Float32Array(SMOKE_N * 3);
@@ -565,25 +443,15 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       const dayT = (timeOfDay - 6) / 12; // -0.5..1.5
       const isNight = timeOfDay < 6 || timeOfDay > 19;
       const dayMix = Math.max(0, Math.min(1, Math.sin((timeOfDay / 24) * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5));
-      // Golden-hour tint near sunrise/sunset
-      const goldenT = Math.max(0, 1 - Math.min(Math.abs(timeOfDay - 6), Math.abs(timeOfDay - 19)) / 1.5);
       // sky/fog colors
       const dayCol = new THREE.Color(city.palette.sky);
       const nightCol = new THREE.Color(city.palette.skyNight);
-      const goldCol = new THREE.Color(0xff9a55);
-      const sky = nightCol.clone().lerp(dayCol, dayMix).lerp(goldCol, goldenT * 0.4);
+      const sky = nightCol.clone().lerp(dayCol, dayMix);
       scene.background = sky;
       (scene.fog as THREE.Fog).color.copy(sky);
-      ambient.intensity = 0.08 + dayMix * 0.18;
-      hemi.intensity = 0.25 + dayMix * 0.55;
-      sun.intensity = dayMix * 1.4;
-      // Warm sun toward golden hour, cool at high noon
-      const sunColor = new THREE.Color(0xfff1d0).lerp(new THREE.Color(0xff8040), goldenT * 0.7);
-      sun.color.copy(sunColor);
-      // Sun orbits across sky based on time
-      const sunAng = ((timeOfDay - 6) / 12) * Math.PI;
-      sun.position.set(Math.cos(sunAng) * 140, Math.max(20, Math.sin(sunAng) * 160), 60);
-      moonLight.intensity = (1 - dayMix) * 0.55;
+      ambient.intensity = 0.15 + dayMix * 0.4;
+      sun.intensity = dayMix * 1.0;
+      moonLight.intensity = (1 - dayMix) * 0.45;
       // window lights at night
       const windowOpacity = isNight ? 0.85 : (dayMix > 0.85 ? 0 : 0.3 * (1 - dayMix));
       lightsGroup.traverse((o) => {
@@ -591,8 +459,6 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
         const mat = mesh.material as THREE.MeshBasicMaterial | undefined;
         if (mat && mat.transparent) mat.opacity = windowOpacity;
       });
-      // Exposure pumps up a touch at night for that AAA glow on lights
-      renderer.toneMappingExposure = gfx.exposure * (isNight ? 1.25 : 1.0);
 
       // weather evolution
       weatherTimer -= dt;
@@ -602,62 +468,8 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       }
       const wet = weather === "light_rain" ? 0.5 : weather === "heavy_rain" ? 0.85 : weather === "storm" ? 1.0 : weather === "fog" ? 0.1 : 0;
       const vis = weather === "fog" ? 0.35 : weather === "storm" ? 0.6 : weather === "heavy_rain" ? 0.75 : 1;
-      (scene.fog as THREE.Fog).far = (50 + 270 * vis) * gfx.fogScale;
+      (scene.fog as THREE.Fog).far = 50 + 270 * vis;
       rainMat.opacity = Math.min(1, wet * 1.1);
-      // Wet road shader: darken + go glossier as wetness rises
-      roadMat.color.copy(baseRoadColor).multiplyScalar(1 - wet * 0.45);
-      roadMat.roughness = 0.85 - wet * 0.7;
-      roadMat.metalness = 0.05 + wet * 0.35;
-      groundMat.roughness = 0.95 - wet * 0.4;
-
-      // Lightning during storms
-      if (gfx.lightning && weather === "storm" && Math.random() < dt * 0.5) {
-        lightning.intensity = 4 + Math.random() * 4;
-      }
-      lightning.intensity *= Math.pow(0.0001, dt);
-
-      // Cloud shadows drift
-      if (cloudShadowMesh) {
-        const m = cloudShadowMesh.material as THREE.MeshBasicMaterial;
-        if (m.map) {
-          m.map.offset.x += dt * 0.01;
-          m.map.offset.y += dt * 0.006;
-        }
-        m.opacity = 0.15 + (1 - wet) * 0.25 * dayMix;
-      }
-
-      // Headlights at night
-      if (gfx.dynamicHeadlights) {
-        const nightFactor = isNight ? 1 : (timeOfDay < 7 || timeOfDay > 18 ? 0.5 : 0);
-        const stormBoost = weather === "storm" || weather === "fog" ? 0.4 : 0;
-        const hi = Math.min(1, nightFactor + stormBoost) * 6;
-        headL.intensity = hi; headR.intensity = hi;
-        // position relative to car
-        const fwdX = Math.sin(yaw), fwdZ = Math.cos(yaw);
-        const sideX = Math.cos(yaw), sideZ = -Math.sin(yaw);
-        headL.position.set(
-          playerCar.position.x + fwdX * 2.1 + sideX * 0.7, 0.7,
-          playerCar.position.z + fwdZ * 2.1 + sideZ * 0.7,
-        );
-        headR.position.set(
-          playerCar.position.x + fwdX * 2.1 - sideX * 0.7, 0.7,
-          playerCar.position.z + fwdZ * 2.1 - sideZ * 0.7,
-        );
-        headL.target.position.set(
-          playerCar.position.x + fwdX * 22, 0.5,
-          playerCar.position.z + fwdZ * 22,
-        );
-        headR.target.position.copy(headL.target.position);
-      }
-
-      // Brake light glow boost
-      const userData = playerCar.userData as any;
-      if (userData.tailMat) {
-        const tm = userData.tailMat as THREE.MeshStandardMaterial;
-        const braking = (keysRef.current["s"] || keysRef.current["arrowdown"] || keysRef.current[" "] || touchRef.current.brake > 0) ? 1 : 0;
-        tm.emissiveIntensity = 1.2 + braking * 2.5;
-      }
-
       if (wet > 0) {
         const pos = rainGeo.attributes.position as THREE.BufferAttribute;
         const arr = pos.array as Float32Array;
@@ -676,34 +488,6 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
           }
         }
         pos.needsUpdate = true;
-      }
-
-      // Tire spray on wet roads
-      if (SPRAY_N > 0 && wet > 0.2 && Math.abs(speed) > 12) {
-        if (Math.random() < dt * 20 * wet) {
-          for (let i = 0; i < SPRAY_N; i++) {
-            if (sprayLife[i] > 0) continue;
-            const back = -2.0;
-            sprayPos[i * 3 + 0] = playerCar.position.x + Math.sin(yaw) * back + (Math.random() - 0.5) * 1.8;
-            sprayPos[i * 3 + 1] = 0.4;
-            sprayPos[i * 3 + 2] = playerCar.position.z + Math.cos(yaw) * back + (Math.random() - 0.5) * 1.8;
-            sprayVel[i * 3 + 0] = (Math.random() - 0.5) * 3;
-            sprayVel[i * 3 + 1] = 0.5 + Math.random();
-            sprayVel[i * 3 + 2] = (Math.random() - 0.5) * 3;
-            sprayLife[i] = 0.5 + Math.random() * 0.4;
-            break;
-          }
-        }
-        for (let i = 0; i < SPRAY_N; i++) {
-          if (sprayLife[i] <= 0) continue;
-          sprayLife[i] -= dt;
-          if (sprayLife[i] <= 0) { sprayPos[i * 3 + 1] = -1000; continue; }
-          sprayPos[i * 3 + 0] += sprayVel[i * 3 + 0] * dt;
-          sprayPos[i * 3 + 1] += sprayVel[i * 3 + 1] * dt;
-          sprayPos[i * 3 + 2] += sprayVel[i * 3 + 2] * dt;
-          sprayVel[i * 3 + 1] -= 2 * dt;
-        }
-        (sprayGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
       }
 
       /* ----- input ----- */
@@ -971,7 +755,7 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cityId, carId, multiplayer, playerName, tier]);
+  }, [cityId, carId, multiplayer, playerName]);
 
   const city: CitySpec = cityById(cityId);
   const car = carById(carId);
@@ -1022,30 +806,6 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       >
         📷 {photoMode ? "Resume" : "Photo"}
       </button>
-
-      {/* Graphics quality toggle */}
-      <button
-        onClick={() => setShowSettings(s => !s)}
-        className="absolute top-32 right-2 glass rounded-full px-3 py-2 text-[10px] font-display uppercase tracking-widest"
-      >
-        ⚙ {TIER_LABELS[tier]}
-      </button>
-      {showSettings && (
-        <div className="absolute top-44 right-2 glass rounded-xl p-2 flex flex-col gap-1 pointer-events-auto">
-          <div className="text-[9px] font-display uppercase tracking-widest text-muted-foreground px-2 pb-1">Graphics</div>
-          {(["low", "medium", "high", "ultra"] as QualityTier[]).map(t => (
-            <button
-              key={t}
-              onClick={() => { saveGraphicsTier(t); setTier(t); setShowSettings(false); }}
-              className={`px-3 py-1 rounded-md text-[10px] font-display uppercase tracking-widest text-left ${
-                tier === t ? "bg-primary text-primary-foreground" : "hover:bg-white/10"
-              }`}
-            >
-              {TIER_LABELS[t]}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Touch controls */}
       <TouchControls onSteer={setSteer} onThrottle={setThrottle} onBrake={setBrake} />
