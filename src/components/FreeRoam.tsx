@@ -971,7 +971,7 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cityId, carId, multiplayer, playerName]);
+  }, [cityId, carId, multiplayer, playerName, tier]);
 
   const city: CitySpec = cityById(cityId);
   const car = carById(carId);
@@ -1022,6 +1022,30 @@ export default function FreeRoam({ cityId, carId, playerName, multiplayer, onExi
       >
         📷 {photoMode ? "Resume" : "Photo"}
       </button>
+
+      {/* Graphics quality toggle */}
+      <button
+        onClick={() => setShowSettings(s => !s)}
+        className="absolute top-32 right-2 glass rounded-full px-3 py-2 text-[10px] font-display uppercase tracking-widest"
+      >
+        ⚙ {TIER_LABELS[tier]}
+      </button>
+      {showSettings && (
+        <div className="absolute top-44 right-2 glass rounded-xl p-2 flex flex-col gap-1 pointer-events-auto">
+          <div className="text-[9px] font-display uppercase tracking-widest text-muted-foreground px-2 pb-1">Graphics</div>
+          {(["low", "medium", "high", "ultra"] as QualityTier[]).map(t => (
+            <button
+              key={t}
+              onClick={() => { saveGraphicsTier(t); setTier(t); setShowSettings(false); }}
+              className={`px-3 py-1 rounded-md text-[10px] font-display uppercase tracking-widest text-left ${
+                tier === t ? "bg-primary text-primary-foreground" : "hover:bg-white/10"
+              }`}
+            >
+              {TIER_LABELS[t]}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Touch controls */}
       <TouchControls onSteer={setSteer} onThrottle={setThrottle} onBrake={setBrake} />
