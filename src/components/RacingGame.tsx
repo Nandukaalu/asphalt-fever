@@ -620,12 +620,14 @@ export default function RacingGame() {
       } catch {}
     };
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 2 : 2.5));
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     const W = WEATHERS.find((w) => w.id === weatherId) ?? WEATHERS[0];
     renderer.toneMappingExposure = W.exposure;
     mount.appendChild(renderer.domElement);
@@ -663,7 +665,9 @@ export default function RacingGame() {
     const sun = new THREE.DirectionalLight(W.sun.color, W.sun.intensity);
     sun.position.set(W.sun.pos[0], W.sun.pos[1], W.sun.pos[2]);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(isMobile ? 2048 : 4096, isMobile ? 2048 : 4096);
+    sun.shadow.bias = -0.0003;
+    sun.shadow.normalBias = 0.02;
     sun.shadow.camera.left = -300;
     sun.shadow.camera.right = 300;
     sun.shadow.camera.top = 300;
