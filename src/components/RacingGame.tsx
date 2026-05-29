@@ -1613,49 +1613,239 @@ export default function RacingGame() {
       cones.push({ mesh: m, pos: cp.clone(), alive: true });
     }
 
-    // ---------- Build car helper ----------
+    // ---------- Build car helper (high-detail Formula-style) ----------
+    // Shared geometries — built once for performance, reused across all cars.
+    const _wheelTyreGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.34, 40, 1);
+    const _wheelSideGeo = new THREE.CylinderGeometry(0.365, 0.365, 0.05, 40, 1);
+    const _rimGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.36, 24, 1);
+    const _rimSpokeGeo = new THREE.BoxGeometry(0.42, 0.035, 0.035);
+    const _hubGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.38, 16);
+    // Smooth monocoque/body capsule
+    const _bodyGeo = new THREE.CapsuleGeometry(0.42, 2.2, 12, 24);
+    // Sidepod (smooth flattened capsule)
+    const _sidepodGeo = new THREE.CapsuleGeometry(0.28, 1.3, 8, 16);
+    // Nose cone (smooth, many segments)
+    const _noseGeo = new THREE.ConeGeometry(0.28, 1.6, 24, 1);
+    // Airbox above driver
+    const _airboxGeo = new THREE.CapsuleGeometry(0.22, 0.55, 8, 16);
+    // Halo torus (full ring, lots of segments)
+    const _haloGeo = new THREE.TorusGeometry(0.32, 0.035, 12, 32);
+    // Front-wing endplates / suspension arms
+    const _suspArmGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.55, 8);
+
+    function makeFrontWing(black: THREE.Material, accent: THREE.Material): THREE.Group {
+      const wg = new THREE.Group();
+      // Main plane — curved via extruded shape
+      const shape = new THREE.Shape();
+      shape.moveTo(-1.05, -0.04);
+      shape.quadraticCurveTo(0, 0.05, 1.05, -0.04);
+      shape.lineTo(1.05, 0.04);
+      shape.quadraticCurveTo(0, 0.14, -1.05, 0.04);
+      shape.lineTo(-1.05, -0.04);
+      const mainPlane = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(shape, { depth: 0.42, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.015, bevelSegments: 3, curveSegments: 16 }),
+        black,
+      );
+      mainPlane.rotation.x = Math.PI / 2;
+      mainPlane.position.set(0, 0.16, 2.55);
+      wg.add(mainPlane);
+      // Upper flap (accent color)
+      const flap = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(shape, { depth: 0.28, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.012, bevelSegments: 2, curveSegments: 12 }),
+        accent,
+      );
+      flap.scale.set(0.88, 0.7, 1);
+      flap.rotation.x = Math.PI / 2;
+      flap.position.set(0, 0.27, 2.6);
+      wg.add(flap);
+      // Endplates
+      const epGeo = new THREE.BoxGeometry(0.04, 0.28, 0.55);
+      const epL = new THREE.Mesh(epGeo, black); epL.position.set(-1.05, 0.22, 2.55); wg.add(epL);
+      const epR = epL.clone(); epR.position.x = 1.05; wg.add(epR);
+      return wg;
+    }
+
+    function makeRearWing(primary: THREE.Material, black: THREE.Material, accent: THREE.Material): THREE.Group {
+      const rg = new THREE.Group();
+      // Endplates
+      const epGeo = new THREE.BoxGeometry(0.05, 0.62, 0.5);
+      const epL = new THREE.Mesh(epGeo, black); epL.position.set(-0.72, 0.78, -1.75); rg.add(epL);
+      const epR = epL.clone(); epR.position.x = 0.72; rg.add(epR);
+      // Main plane
+      const main = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.45), primary);
+      main.position.set(0, 0.92, -1.75); main.castShadow = true; rg.add(main);
+      // Upper flap (accent)
+      const flap = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, 0.35), accent);
+      flap.position.set(0, 1.06, -1.78); flap.rotation.x = -0.12; flap.castShadow = true; rg.add(flap);
+      // DRS center mount
+      const mount = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.3), black);
+      mount.position.set(0, 0.84, -1.75); rg.add(mount);
+      // Beam wing below
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 0.2), black);
+      beam.position.set(0, 0.52, -1.85); rg.add(beam);
+      return rg;
+    }
+
     function buildCar(d: Driver): { group: THREE.Group; wheels: THREE.Mesh[]; steeringGroup: THREE.Group } {
       const g = new THREE.Group();
-      const primary = new THREE.MeshStandardMaterial({ color: d.primary, roughness: 0.35, metalness: 0.4 });
-      const black = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 });
-      const accent = new THREE.MeshStandardMaterial({ color: d.secondary, roughness: 0.5 });
-      const tyre = new THREE.MeshStandardMaterial({ color: 0x191919, roughness: 0.95 });
+      // Physical paint with clearcoat for realistic metallic reflection
+      const primary = new THREE.MeshPhysicalMaterial({
+        color: d.primary,
+        roughness: 0.32,
+        metalness: 0.55,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.1,
+        envMapIntensity: 1.1,
+      });
+      const accent = new THREE.MeshPhysicalMaterial({
+        color: d.secondary,
+        roughness: 0.38,
+        metalness: 0.5,
+        clearcoat: 0.7,
+        clearcoatRoughness: 0.15,
+        envMapIntensity: 1.0,
+      });
+      // Carbon fiber — dark, slightly metallic, low roughness
+      const carbon = new THREE.MeshPhysicalMaterial({
+        color: 0x0a0a0c,
+        roughness: 0.42,
+        metalness: 0.6,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.25,
+      });
+      const black = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.7, metalness: 0.3 });
+      const tyre = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.92, metalness: 0.05 });
+      const tyreSide = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.85, metalness: 0.05 });
+      const rim = new THREE.MeshPhysicalMaterial({ color: 0xb8b8c0, roughness: 0.25, metalness: 0.95, clearcoat: 0.4 });
+      const chrome = new THREE.MeshPhysicalMaterial({ color: 0xe8e8ea, roughness: 0.15, metalness: 1, clearcoat: 0.6 });
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.45, 3.2), primary);
-      body.position.y = 0.4; body.castShadow = true; g.add(body);
-      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 8), primary);
-      nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.35, 2.0); nose.castShadow = true; g.add(nose);
-      const fWing = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.5), black);
-      fWing.position.set(0, 0.18, 2.55); g.add(fWing);
-      const fWingTop = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.05, 0.35), accent);
-      fWingTop.position.set(0, 0.28, 2.55); g.add(fWingTop);
-      const rWP1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.6, 0.4), black);
-      rWP1.position.set(-0.35, 0.7, -1.7); g.add(rWP1);
-      const rWP2 = rWP1.clone(); rWP2.position.x = 0.35; g.add(rWP2);
-      const rWing = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.45), primary);
-      rWing.position.set(0, 1.0, -1.7); rWing.castShadow = true; g.add(rWing);
-      const halo = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.04, 8, 16, Math.PI), black);
-      halo.rotation.y = Math.PI / 2; halo.position.set(0, 0.85, 0.3); g.add(halo);
-      const cover = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 1.6), primary);
-      cover.position.set(0, 0.7, -0.6); cover.castShadow = true; g.add(cover);
-      const cockpit = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.2, 0.7), black);
-      cockpit.position.set(0, 0.7, 0.4); g.add(cockpit);
+      // --- Monocoque (smooth capsule) ---
+      const body = new THREE.Mesh(_bodyGeo, primary);
+      body.rotation.x = Math.PI / 2;
+      body.scale.set(1, 1, 0.55);
+      body.position.y = 0.42; body.castShadow = true; body.receiveShadow = true;
+      g.add(body);
 
-      const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.32, 20);
-      const wheels: THREE.Mesh[] = [];
-      const wp: [number, number, number][] = [[-0.75, 0.36, 1.3], [0.75, 0.36, 1.3], [-0.78, 0.36, -1.3], [0.78, 0.36, -1.3]];
-      wp.forEach(([x, y, z]) => {
-        const w = new THREE.Mesh(wheelGeo, tyre);
-        w.rotation.z = Math.PI / 2; w.position.set(x, y, z); w.castShadow = true;
-        wheels.push(w); g.add(w);
+      // --- Nose cone (smooth) ---
+      const nose = new THREE.Mesh(_noseGeo, primary);
+      nose.rotation.x = Math.PI / 2;
+      nose.position.set(0, 0.34, 2.0);
+      nose.castShadow = true;
+      g.add(nose);
+      // Nose tip accent stripe
+      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.16, 0.18, 24), accent);
+      stripe.rotation.x = Math.PI / 2;
+      stripe.position.set(0, 0.34, 2.65);
+      g.add(stripe);
+
+      // --- Sidepods (smooth, curved) ---
+      const podL = new THREE.Mesh(_sidepodGeo, primary);
+      podL.rotation.x = Math.PI / 2;
+      podL.scale.set(0.7, 1, 0.55);
+      podL.position.set(-0.55, 0.4, -0.2);
+      podL.castShadow = true;
+      g.add(podL);
+      const podR = podL.clone(); podR.position.x = 0.55; g.add(podR);
+      // Sidepod inlet (carbon)
+      const inletGeo = new THREE.CylinderGeometry(0.14, 0.18, 0.1, 16);
+      const inletL = new THREE.Mesh(inletGeo, carbon);
+      inletL.rotation.x = Math.PI / 2; inletL.position.set(-0.62, 0.5, 0.4); g.add(inletL);
+      const inletR = inletL.clone(); inletR.position.x = 0.62; g.add(inletR);
+
+      // --- Engine cover / airbox ---
+      const cover = new THREE.Mesh(_bodyGeo, primary);
+      cover.rotation.x = Math.PI / 2;
+      cover.scale.set(0.55, 0.6, 0.4);
+      cover.position.set(0, 0.78, -0.7);
+      cover.castShadow = true;
+      g.add(cover);
+      const airbox = new THREE.Mesh(_airboxGeo, primary);
+      airbox.rotation.x = Math.PI / 2;
+      airbox.scale.set(0.9, 1, 0.7);
+      airbox.position.set(0, 0.95, -0.05);
+      airbox.castShadow = true;
+      g.add(airbox);
+      // Airbox inlet
+      const inlet = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.1, 16), carbon);
+      inlet.rotation.x = Math.PI / 2; inlet.position.set(0, 0.97, 0.32); g.add(inlet);
+
+      // --- Cockpit opening (carbon) ---
+      const cockpit = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.7), carbon);
+      cockpit.position.set(0, 0.7, 0.45); g.add(cockpit);
+
+      // --- Halo (full ring) ---
+      const halo = new THREE.Mesh(_haloGeo, carbon);
+      halo.rotation.x = Math.PI / 2;
+      halo.scale.set(1, 1, 0.85);
+      halo.position.set(0, 0.92, 0.3);
+      g.add(halo);
+      const haloFront = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 10), carbon);
+      haloFront.position.set(0, 0.78, 0.62); g.add(haloFront);
+
+      // --- Wings ---
+      g.add(makeFrontWing(carbon, accent));
+      g.add(makeRearWing(primary, carbon, accent));
+
+      // --- Floor / diffuser ---
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, 3.4), carbon);
+      floor.position.set(0, 0.1, 0); g.add(floor);
+      const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.18, 0.4), carbon);
+      diffuser.position.set(0, 0.18, -1.85); g.add(diffuser);
+
+      // --- Suspension arms (front + rear) ---
+      const armPositions: Array<[number, number, number, number]> = [
+        // x, z, angleY, side(-1 left / 1 right)
+        [0, 1.3, 0, -1], [0, 1.3, 0, 1],
+        [0, -1.3, 0, -1], [0, -1.3, 0, 1],
+      ];
+      armPositions.forEach(([_, z, __, side]) => {
+        const arm = new THREE.Mesh(_suspArmGeo, carbon);
+        arm.rotation.z = Math.PI / 2;
+        arm.position.set(side * 0.4, 0.32, z);
+        g.add(arm);
       });
 
-      // Steering wheel
+      // --- Wheels (detailed: tyre + sidewall + rim + spokes + hub) ---
+      const wheels: THREE.Mesh[] = [];
+      const wp: [number, number, number][] = [
+        [-0.78, 0.36, 1.3], [0.78, 0.36, 1.3],
+        [-0.82, 0.36, -1.3], [0.82, 0.36, -1.3],
+      ];
+      wp.forEach(([x, y, z]) => {
+        const wheel = new THREE.Group();
+        const t = new THREE.Mesh(_wheelTyreGeo, tyre);
+        t.castShadow = true; wheel.add(t);
+        const sideA = new THREE.Mesh(_wheelSideGeo, tyreSide); sideA.position.y = 0.17; wheel.add(sideA);
+        const sideB = new THREE.Mesh(_wheelSideGeo, tyreSide); sideB.position.y = -0.17; wheel.add(sideB);
+        const r = new THREE.Mesh(_rimGeo, rim); wheel.add(r);
+        // 5 spokes
+        for (let s = 0; s < 5; s++) {
+          const sp = new THREE.Mesh(_rimSpokeGeo, rim);
+          sp.rotation.y = (s / 5) * Math.PI * 2;
+          wheel.add(sp);
+        }
+        const hub = new THREE.Mesh(_hubGeo, chrome);
+        wheel.add(hub);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(x, y, z);
+        // attach geometry rotation to a Mesh proxy so existing spin code still works
+        const proxy = new THREE.Mesh(new THREE.BufferGeometry(), tyre);
+        proxy.visible = false;
+        proxy.add(wheel);
+        proxy.position.set(x, y, z);
+        wheel.position.set(0, 0, 0);
+        g.add(proxy);
+        wheels.push(proxy);
+      });
+
+      // --- Steering wheel (detailed) ---
       const sg = new THREE.Group();
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.025, 8, 24), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.022, 12, 32), carbon);
       sg.add(ring);
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.04), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-      sg.add(bar);
+      const grip = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.03, 12, 32, Math.PI), black);
+      grip.rotation.z = Math.PI; sg.add(grip);
+      const display = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.07, 0.012), new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x224488, emissiveIntensity: 0.6 }));
+      display.position.z = 0.012; sg.add(display);
       sg.position.set(0, 0.72, 0.55); sg.rotation.x = -Math.PI / 2.6;
       g.add(sg);
 
