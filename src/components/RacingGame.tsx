@@ -659,6 +659,11 @@ export default function RacingGame() {
     scene.add(skyDome);
     scene.fog = new THREE.FogExp2(W.fog.color, W.fog.density);
 
+    // PBR environment for realistic reflections on car paint & metal
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04);
+    scene.environment = envRT.texture;
+
     const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 3000);
 
     const hemi = new THREE.HemisphereLight(W.hemi.sky, W.hemi.ground, W.hemi.intensity);
