@@ -931,6 +931,179 @@ export default function RacingGame() {
       scene.add(sign);
     }
 
+    // ===== Grandstands + crowd atmosphere =====
+    type Stand = {
+      group: THREE.Group;
+      crowd: THREE.Points;
+      crowdBase: Float32Array;
+      flags: THREE.Mesh[];
+      flashPool: THREE.PointLight[];
+      flashTimer: number;
+      phase: number;
+      isNight: boolean;
+    };
+    const stands: Stand[] = [];
+    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x44464d, roughness: 0.92, metalness: 0.05 });
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x22252c, roughness: 0.55, metalness: 0.8 });
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x101218, roughness: 0.7, metalness: 0.3 });
+    const bannerMats = [
+      new THREE.MeshStandardMaterial({ color: 0xe11d2b, roughness: 0.85, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.85, side: THREE.DoubleSide }),
+    ];
+    const flagColors = [0xe11d2b, 0x1e3a8a, 0xfacc15, 0x10b981, 0xffffff, 0x9333ea];
+    const standFractions = [0.06, 0.28, 0.52, 0.78];
+    const wantsNight = W.id.includes("night") || W.id.includes("storm");
+    standFractions.forEach((frac, idx) => {
+      const g = new THREE.Group();
+      const p = curve.getPointAt(frac);
+      const tan = curve.getTangentAt(frac).normalize();
+      const nrm = new THREE.Vector3(-tan.z, 0, tan.x);
+      // Place the stand outside the track on the OPPOSITE side from the pit lane
+      // for the first stand (idx 0), then alternate to avoid clipping pit boxes.
+      const sideSign = idx === 0 ? -1 : (idx % 2 === 0 ? 1 : -1);
+      const baseOffset = TRACK_WIDTH / 2 + 14;
+      const standCenter = p.clone().addScaledVector(nrm, sideSign * baseOffset);
+      g.position.copy(standCenter);
+      g.rotation.y = Math.atan2(tan.x, tan.z) + (sideSign > 0 ? Math.PI : 0);
+      // Tiered concrete ramp (3 risers, raked back)
+      const STAND_W = 64;
+      const tiers = 4;
+      for (let i = 0; i < tiers; i++) {
+        const riser = new THREE.Mesh(
+          new THREE.BoxGeometry(STAND_W, 1.4, 3.2),
+          concreteMat,
+        );
+        riser.position.set(0, 0.7 + i * 1.4, 2 + i * 3.2);
+        riser.receiveShadow = true;
+        riser.castShadow = true;
+        g.add(riser);
+      }
+      // Back wall
+      const back = new THREE.Mesh(
+        new THREE.BoxGeometry(STAND_W, tiers * 1.6 + 3, 0.8),
+        concreteMat,
+      );
+      back.position.set(0, (tiers * 1.4) * 0.5 + 2.5, 2 + tiers * 3.2 + 0.4);
+      back.castShadow = true;
+      g.add(back);
+      // Roof canopy supported on two steel pillars
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(STAND_W, 0.3, tiers * 3.2 + 3), canopyMat);
+      roof.position.set(0, tiers * 1.4 + 3.4, 2 + (tiers * 3.2) / 2);
+      roof.castShadow = true;
+      g.add(roof);
+      for (const sx of [-STAND_W / 2 + 1.2, STAND_W / 2 - 1.2]) {
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, tiers * 1.4 + 3.4, 8), steelMat);
+        pillar.position.set(sx, (tiers * 1.4 + 3.4) / 2, 2 + (tiers * 3.2) / 2);
+        g.add(pillar);
+      }
+      // Team banner along the front of the stand
+      const banner = new THREE.Mesh(
+        new THREE.BoxGeometry(STAND_W * 0.92, 1.4, 0.06),
+        bannerMats[idx % bannerMats.length],
+      );
+      banner.position.set(0, 0.7, 0.4);
+      g.add(banner);
+      // VIP suite on the middle stand
+      if (idx === 2) {
+        const vip = new THREE.Mesh(
+          new THREE.BoxGeometry(STAND_W * 0.55, 2.6, 3.6),
+          new THREE.MeshPhysicalMaterial({
+            color: 0x202833, roughness: 0.18, metalness: 0.1,
+            transmission: 0.55, transparent: true, opacity: 0.85,
+            emissive: 0xffb066, emissiveIntensity: 0.35,
+          }),
+        );
+        vip.position.set(0, tiers * 1.4 + 2, 2 + (tiers * 3.2) / 2);
+        g.add(vip);
+      }
+      // Crowd as Points — one draw call per stand
+      const CROWD_N = 520;
+      const positions = new Float32Array(CROWD_N * 3);
+      const colors = new Float32Array(CROWD_N * 3);
+      for (let i = 0; i < CROWD_N; i++) {
+        const row = Math.floor(i / Math.ceil(STAND_W / 0.9));
+        const inRow = i % Math.ceil(STAND_W / 0.9);
+        const x = -STAND_W / 2 + 0.6 + inRow * 0.9 + (Math.random() - 0.5) * 0.4;
+        const tier = Math.min(tiers - 1, Math.floor(row));
+        const y = 1.5 + tier * 1.4 + Math.random() * 0.25;
+        const z = 2 + tier * 3.2 + (Math.random() - 0.5) * 0.6;
+        positions[i * 3] = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = z;
+        const c = new THREE.Color().setHSL(Math.random(), 0.55, 0.45 + Math.random() * 0.2);
+        colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      }
+      const crowdGeo = new THREE.BufferGeometry();
+      crowdGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      crowdGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      const crowd = new THREE.Points(
+        crowdGeo,
+        new THREE.PointsMaterial({ size: 0.55, vertexColors: true, sizeAttenuation: true }),
+      );
+      g.add(crowd);
+      // Flag poles with cloth
+      const flags: THREE.Mesh[] = [];
+      for (let i = 0; i < 6; i++) {
+        const fx = -STAND_W / 2 + 4 + i * (STAND_W - 8) / 5;
+        const pole = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.06, 0.06, 5.5, 6),
+          steelMat,
+        );
+        pole.position.set(fx, tiers * 1.4 + 4.8, 1.4);
+        g.add(pole);
+        const flag = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.6, 1),
+          new THREE.MeshStandardMaterial({
+            color: flagColors[(i + idx) % flagColors.length],
+            roughness: 0.85, side: THREE.DoubleSide,
+          }),
+        );
+        flag.position.set(fx + 0.85, tiers * 1.4 + 6.8, 1.4);
+        g.add(flag);
+        flags.push(flag);
+      }
+      // Camera flash pool (8 lights, recycled)
+      const flashPool: THREE.PointLight[] = [];
+      for (let i = 0; i < 8; i++) {
+        const l = new THREE.PointLight(0xffffff, 0, 18, 2);
+        l.position.set(0, 3, 1);
+        g.add(l);
+        flashPool.push(l);
+      }
+      // Floodlights at night
+      if (wantsNight) {
+        for (const sx of [-STAND_W / 2 - 2, STAND_W / 2 + 2]) {
+          const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 12, 6), steelMat);
+          pylon.position.set(sx, 6, 2);
+          g.add(pylon);
+          const head = new THREE.Mesh(
+            new THREE.BoxGeometry(1.6, 0.6, 0.6),
+            new THREE.MeshStandardMaterial({
+              color: 0xfff4d6, emissive: 0xfff0c8, emissiveIntensity: 1.4,
+              roughness: 0.4, metalness: 0.2,
+            }),
+          );
+          head.position.set(sx, 12, 2);
+          g.add(head);
+          const fLight = new THREE.PointLight(0xfff0c8, 1.6, 80, 1.6);
+          fLight.position.set(sx, 12, 2);
+          g.add(fLight);
+        }
+      }
+      scene.add(g);
+      stands.push({
+        group: g,
+        crowd,
+        crowdBase: positions.slice(),
+        flags,
+        flashPool,
+        flashTimer: Math.random() * 0.6,
+        phase: Math.random() * Math.PI * 2,
+        isNight: wantsNight,
+      });
+    });
+
     // ===== Pit crew + jack + spare tires (animated during pit stop) =====
     const pitCrewGroup = new THREE.Group();
     pitCrewGroup.visible = false;
