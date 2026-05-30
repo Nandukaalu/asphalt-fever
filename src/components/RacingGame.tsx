@@ -3423,6 +3423,14 @@ export default function RacingGame() {
   return (
     <div className="relative w-full overflow-hidden bg-black touch-none" style={{ height: "100dvh" }}>
       <div ref={mountRef} className="absolute inset-0" />
+      {/* Cinematic vignette — deepens corners for broadcast-style framing */}
+      <div
+        className="absolute inset-0 pointer-events-none z-10"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,0.55) 100%)",
+        }}
+      />
 
       {screen === "menu" && (
         <MainMenu
