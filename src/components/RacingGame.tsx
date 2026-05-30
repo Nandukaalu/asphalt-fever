@@ -2295,6 +2295,40 @@ export default function RacingGame() {
       const rightKey = keys["d"] || keys["arrowright"];
       const handbrake = !inPit && (keys[" "] || t.handbrake);
 
+      // ---------- Physical pit-lane entry trigger ----------
+      // The player must actually drive into the pit-entry corridor with
+      // intent enabled — no teleport, no auto-pit at the SF line.
+      if (
+        !isQualifying &&
+        !raceFinished &&
+        pitRequestedRef.current &&
+        !pitActiveRef.current &&
+        isInPitEntryZone(carPos)
+      ) {
+        const roll = Math.random();
+        pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
+        pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
+          pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
+        );
+        setPitStatus(
+          pitIssue === "slow-gun" ? "Wheel gun delay" :
+          pitIssue === "stuck-tyre" ? "Stuck tyre" :
+          pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
+        );
+        pitActiveRef.current = true;
+        setPitActive(true);
+        // No teleport — animation starts from the car's actual position.
+        pitBoxStart = now;
+        setPitProgress(0);
+        setPitTimeLeft(pitDurationMs / 1000);
+        sayEngineer("Pit entry. Speed limiter on.", "info", 2800);
+      }
+      // Soft pit-lane speed limit (60 km/h ≈ 16.7 m/s ≈ ~10 internal units).
+      const PIT_LIMIT = 10;
+      if (!pitActiveRef.current && isInPitLane(carPos) && Math.abs(speed) > PIT_LIMIT) {
+        speed = Math.sign(speed) * PIT_LIMIT;
+      }
+
       // ---------- Pit stop in progress: hold car in box, run timer ----------
       if (inPit) {
         speed = 0;
