@@ -2408,8 +2408,11 @@ export default function RacingGame() {
           tireWear = 0;
           setTyreWearHud(0);
           pitLiftY = 0;
-          carPos.copy(pitExitPos);
-          heading = pitBoxHeading;
+          // Release the car onto the racing line so it never spawns
+          // outside the map and never sits in the parallel pit strip
+          // after the stop completes.
+          carPos.copy(trackRejoinPos);
+          heading = trackRejoinHeading;
           pitCrewGroup.visible = false;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
