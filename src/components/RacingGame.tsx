@@ -2560,26 +2560,9 @@ export default function RacingGame() {
             sayEngineer(ENGINEER_LINES.poleLap(), "good");
           }
           // Begin a pit stop if requested and the race isn't over yet
-          if (!isQualifying && pitRequestedRef.current && !raceFinished && !pitActiveRef.current) {
-            const roll = Math.random();
-            pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
-            pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
-              pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
-            );
-            setPitStatus(
-              pitIssue === "slow-gun" ? "Wheel gun delay" :
-              pitIssue === "stuck-tyre" ? "Stuck tyre" :
-              pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
-            );
-            pitActiveRef.current = true;
-            setPitActive(true);
-            carPos.copy(pitEntryPos);
-            heading = pitBoxHeading;
-            speed = 6;
-            pitBoxStart = now;
-            setPitProgress(0);
-            setPitTimeLeft(pitDurationMs / 1000);
-          }
+          // Lap line crossings no longer auto-teleport into the pit. The
+          // player must physically drive into the pit-entry corridor.
+          // See the per-frame check below.
         }
         // If sectors weren't all hit, the line crossing is ignored — no lap.
       }
