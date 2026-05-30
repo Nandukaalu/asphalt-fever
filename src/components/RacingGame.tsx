@@ -630,7 +630,8 @@ export default function RacingGame() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     const W = WEATHERS.find((w) => w.id === weatherId) ?? WEATHERS[0];
-    renderer.toneMappingExposure = W.exposure;
+    // Cinematic tone: pull exposure down for darker, broadcast-style image.
+    renderer.toneMappingExposure = W.exposure * 0.82;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -666,9 +667,10 @@ export default function RacingGame() {
 
     const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 3000);
 
-    const hemi = new THREE.HemisphereLight(W.hemi.sky, W.hemi.ground, W.hemi.intensity);
+    // Lower hemispheric fill for more contrast; sun stays primary key.
+    const hemi = new THREE.HemisphereLight(W.hemi.sky, W.hemi.ground, W.hemi.intensity * 0.72);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(W.sun.color, W.sun.intensity);
+    const sun = new THREE.DirectionalLight(W.sun.color, W.sun.intensity * 1.12);
     sun.position.set(W.sun.pos[0], W.sun.pos[1], W.sun.pos[2]);
     sun.castShadow = true;
     sun.shadow.mapSize.set(isMobile ? 2048 : 4096, isMobile ? 2048 : 4096);
@@ -928,6 +930,179 @@ export default function RacingGame() {
       sign.lookAt(curve.getPointAt(0).x, 2.5, curve.getPointAt(0).z);
       scene.add(sign);
     }
+
+    // ===== Grandstands + crowd atmosphere =====
+    type Stand = {
+      group: THREE.Group;
+      crowd: THREE.Points;
+      crowdBase: Float32Array;
+      flags: THREE.Mesh[];
+      flashPool: THREE.PointLight[];
+      flashTimer: number;
+      phase: number;
+      isNight: boolean;
+    };
+    const stands: Stand[] = [];
+    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x44464d, roughness: 0.92, metalness: 0.05 });
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x22252c, roughness: 0.55, metalness: 0.8 });
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x101218, roughness: 0.7, metalness: 0.3 });
+    const bannerMats = [
+      new THREE.MeshStandardMaterial({ color: 0xe11d2b, roughness: 0.85, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.85, side: THREE.DoubleSide }),
+      new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.85, side: THREE.DoubleSide }),
+    ];
+    const flagColors = [0xe11d2b, 0x1e3a8a, 0xfacc15, 0x10b981, 0xffffff, 0x9333ea];
+    const standFractions = [0.06, 0.28, 0.52, 0.78];
+    const wantsNight = W.id.includes("night") || W.id.includes("storm");
+    standFractions.forEach((frac, idx) => {
+      const g = new THREE.Group();
+      const p = curve.getPointAt(frac);
+      const tan = curve.getTangentAt(frac).normalize();
+      const nrm = new THREE.Vector3(-tan.z, 0, tan.x);
+      // Place the stand outside the track on the OPPOSITE side from the pit lane
+      // for the first stand (idx 0), then alternate to avoid clipping pit boxes.
+      const sideSign = idx === 0 ? -1 : (idx % 2 === 0 ? 1 : -1);
+      const baseOffset = TRACK_WIDTH / 2 + 14;
+      const standCenter = p.clone().addScaledVector(nrm, sideSign * baseOffset);
+      g.position.copy(standCenter);
+      g.rotation.y = Math.atan2(tan.x, tan.z) + (sideSign > 0 ? Math.PI : 0);
+      // Tiered concrete ramp (3 risers, raked back)
+      const STAND_W = 64;
+      const tiers = 4;
+      for (let i = 0; i < tiers; i++) {
+        const riser = new THREE.Mesh(
+          new THREE.BoxGeometry(STAND_W, 1.4, 3.2),
+          concreteMat,
+        );
+        riser.position.set(0, 0.7 + i * 1.4, 2 + i * 3.2);
+        riser.receiveShadow = true;
+        riser.castShadow = true;
+        g.add(riser);
+      }
+      // Back wall
+      const back = new THREE.Mesh(
+        new THREE.BoxGeometry(STAND_W, tiers * 1.6 + 3, 0.8),
+        concreteMat,
+      );
+      back.position.set(0, (tiers * 1.4) * 0.5 + 2.5, 2 + tiers * 3.2 + 0.4);
+      back.castShadow = true;
+      g.add(back);
+      // Roof canopy supported on two steel pillars
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(STAND_W, 0.3, tiers * 3.2 + 3), canopyMat);
+      roof.position.set(0, tiers * 1.4 + 3.4, 2 + (tiers * 3.2) / 2);
+      roof.castShadow = true;
+      g.add(roof);
+      for (const sx of [-STAND_W / 2 + 1.2, STAND_W / 2 - 1.2]) {
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, tiers * 1.4 + 3.4, 8), steelMat);
+        pillar.position.set(sx, (tiers * 1.4 + 3.4) / 2, 2 + (tiers * 3.2) / 2);
+        g.add(pillar);
+      }
+      // Team banner along the front of the stand
+      const banner = new THREE.Mesh(
+        new THREE.BoxGeometry(STAND_W * 0.92, 1.4, 0.06),
+        bannerMats[idx % bannerMats.length],
+      );
+      banner.position.set(0, 0.7, 0.4);
+      g.add(banner);
+      // VIP suite on the middle stand
+      if (idx === 2) {
+        const vip = new THREE.Mesh(
+          new THREE.BoxGeometry(STAND_W * 0.55, 2.6, 3.6),
+          new THREE.MeshPhysicalMaterial({
+            color: 0x202833, roughness: 0.18, metalness: 0.1,
+            transmission: 0.55, transparent: true, opacity: 0.85,
+            emissive: 0xffb066, emissiveIntensity: 0.35,
+          }),
+        );
+        vip.position.set(0, tiers * 1.4 + 2, 2 + (tiers * 3.2) / 2);
+        g.add(vip);
+      }
+      // Crowd as Points — one draw call per stand
+      const CROWD_N = 520;
+      const positions = new Float32Array(CROWD_N * 3);
+      const colors = new Float32Array(CROWD_N * 3);
+      for (let i = 0; i < CROWD_N; i++) {
+        const row = Math.floor(i / Math.ceil(STAND_W / 0.9));
+        const inRow = i % Math.ceil(STAND_W / 0.9);
+        const x = -STAND_W / 2 + 0.6 + inRow * 0.9 + (Math.random() - 0.5) * 0.4;
+        const tier = Math.min(tiers - 1, Math.floor(row));
+        const y = 1.5 + tier * 1.4 + Math.random() * 0.25;
+        const z = 2 + tier * 3.2 + (Math.random() - 0.5) * 0.6;
+        positions[i * 3] = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = z;
+        const c = new THREE.Color().setHSL(Math.random(), 0.55, 0.45 + Math.random() * 0.2);
+        colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
+      }
+      const crowdGeo = new THREE.BufferGeometry();
+      crowdGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      crowdGeo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      const crowd = new THREE.Points(
+        crowdGeo,
+        new THREE.PointsMaterial({ size: 0.55, vertexColors: true, sizeAttenuation: true }),
+      );
+      g.add(crowd);
+      // Flag poles with cloth
+      const flags: THREE.Mesh[] = [];
+      for (let i = 0; i < 6; i++) {
+        const fx = -STAND_W / 2 + 4 + i * (STAND_W - 8) / 5;
+        const pole = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.06, 0.06, 5.5, 6),
+          steelMat,
+        );
+        pole.position.set(fx, tiers * 1.4 + 4.8, 1.4);
+        g.add(pole);
+        const flag = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.6, 1),
+          new THREE.MeshStandardMaterial({
+            color: flagColors[(i + idx) % flagColors.length],
+            roughness: 0.85, side: THREE.DoubleSide,
+          }),
+        );
+        flag.position.set(fx + 0.85, tiers * 1.4 + 6.8, 1.4);
+        g.add(flag);
+        flags.push(flag);
+      }
+      // Camera flash pool (8 lights, recycled)
+      const flashPool: THREE.PointLight[] = [];
+      for (let i = 0; i < 8; i++) {
+        const l = new THREE.PointLight(0xffffff, 0, 18, 2);
+        l.position.set(0, 3, 1);
+        g.add(l);
+        flashPool.push(l);
+      }
+      // Floodlights at night
+      if (wantsNight) {
+        for (const sx of [-STAND_W / 2 - 2, STAND_W / 2 + 2]) {
+          const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 12, 6), steelMat);
+          pylon.position.set(sx, 6, 2);
+          g.add(pylon);
+          const head = new THREE.Mesh(
+            new THREE.BoxGeometry(1.6, 0.6, 0.6),
+            new THREE.MeshStandardMaterial({
+              color: 0xfff4d6, emissive: 0xfff0c8, emissiveIntensity: 1.4,
+              roughness: 0.4, metalness: 0.2,
+            }),
+          );
+          head.position.set(sx, 12, 2);
+          g.add(head);
+          const fLight = new THREE.PointLight(0xfff0c8, 1.6, 80, 1.6);
+          fLight.position.set(sx, 12, 2);
+          g.add(fLight);
+        }
+      }
+      scene.add(g);
+      stands.push({
+        group: g,
+        crowd,
+        crowdBase: positions.slice(),
+        flags,
+        flashPool,
+        flashTimer: Math.random() * 0.6,
+        phase: Math.random() * Math.PI * 2,
+        isNight: wantsNight,
+      });
+    });
 
     // ===== Pit crew + jack + spare tires (animated during pit stop) =====
     const pitCrewGroup = new THREE.Group();
@@ -2104,6 +2279,20 @@ export default function RacingGame() {
       const side = dx * pitN.x + dz * pitN.z;
       return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
     }
+    // Player must physically drive into this rectangle (off the racing line,
+    // toward the pit side, just before SF) for a pit stop to begin.
+    function isInPitEntryZone(pos: THREE.Vector3) {
+      const dx = pos.x - pitEntryPos.x;
+      const dz = pos.z - pitEntryPos.z;
+      const along = dx * pitForward.x + dz * pitForward.z;
+      const side = dx * pitN.x + dz * pitN.z;
+      // Wide funnel: long along racing direction, narrow toward pit side only.
+      return along > -22 && along < 14 && side > -1.5 && side < 9;
+    }
+    // Precompute the rejoin tangent so the car exits onto the racing line
+    // in the correct direction (not floating outside the map).
+    const _rejoinTan = curve.getTangentAt(0.06).normalize();
+    const trackRejoinHeading = Math.atan2(_rejoinTan.x, _rejoinTan.z);
 
     const onResize = () => {
       const w = mount.clientWidth, h = mount.clientHeight;
@@ -2279,6 +2468,40 @@ export default function RacingGame() {
       const rightKey = keys["d"] || keys["arrowright"];
       const handbrake = !inPit && (keys[" "] || t.handbrake);
 
+      // ---------- Physical pit-lane entry trigger ----------
+      // The player must actually drive into the pit-entry corridor with
+      // intent enabled — no teleport, no auto-pit at the SF line.
+      if (
+        !isQualifying &&
+        !raceFinished &&
+        pitRequestedRef.current &&
+        !pitActiveRef.current &&
+        isInPitEntryZone(carPos)
+      ) {
+        const roll = Math.random();
+        pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
+        pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
+          pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
+        );
+        setPitStatus(
+          pitIssue === "slow-gun" ? "Wheel gun delay" :
+          pitIssue === "stuck-tyre" ? "Stuck tyre" :
+          pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
+        );
+        pitActiveRef.current = true;
+        setPitActive(true);
+        // No teleport — animation starts from the car's actual position.
+        pitBoxStart = now;
+        setPitProgress(0);
+        setPitTimeLeft(pitDurationMs / 1000);
+        sayEngineer("Pit entry. Speed limiter on.", "info", 2800);
+      }
+      // Soft pit-lane speed limit (60 km/h ≈ 16.7 m/s ≈ ~10 internal units).
+      const PIT_LIMIT = 10;
+      if (!pitActiveRef.current && isInPitLane(carPos) && Math.abs(speed) > PIT_LIMIT) {
+        speed = Math.sign(speed) * PIT_LIMIT;
+      }
+
       // ---------- Pit stop in progress: hold car in box, run timer ----------
       if (inPit) {
         speed = 0;
@@ -2358,8 +2581,11 @@ export default function RacingGame() {
           tireWear = 0;
           setTyreWearHud(0);
           pitLiftY = 0;
-          carPos.copy(pitExitPos);
-          heading = pitBoxHeading;
+          // Release the car onto the racing line so it never spawns
+          // outside the map and never sits in the parallel pit strip
+          // after the stop completes.
+          carPos.copy(trackRejoinPos);
+          heading = trackRejoinHeading;
           pitCrewGroup.visible = false;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
@@ -2544,26 +2770,9 @@ export default function RacingGame() {
             sayEngineer(ENGINEER_LINES.poleLap(), "good");
           }
           // Begin a pit stop if requested and the race isn't over yet
-          if (!isQualifying && pitRequestedRef.current && !raceFinished && !pitActiveRef.current) {
-            const roll = Math.random();
-            pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
-            pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
-              pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
-            );
-            setPitStatus(
-              pitIssue === "slow-gun" ? "Wheel gun delay" :
-              pitIssue === "stuck-tyre" ? "Stuck tyre" :
-              pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
-            );
-            pitActiveRef.current = true;
-            setPitActive(true);
-            carPos.copy(pitEntryPos);
-            heading = pitBoxHeading;
-            speed = 6;
-            pitBoxStart = now;
-            setPitProgress(0);
-            setPitTimeLeft(pitDurationMs / 1000);
-          }
+          // Lap line crossings no longer auto-teleport into the pit. The
+          // player must physically drive into the pit-entry corridor.
+          // See the per-frame check below.
         }
         // If sectors weren't all hit, the line crossing is ignored — no lap.
       }
@@ -2766,6 +2975,44 @@ export default function RacingGame() {
         if (lightningFlash > 0) {
           lightningFlash = Math.max(0, lightningFlash - dt * 5);
           lightningLight.intensity = lightningFlash * 4;
+        }
+      }
+
+      // ---------- Grandstand crowd + flags + camera flashes ----------
+      const lapsLeftNow = totalLaps - (lap - 1);
+      const hypeMul = raceFinished ? 3.5 : lapsLeftNow <= 1 ? 2.2 : 1;
+      for (const st of stands) {
+        // Crowd y-bob (cheap: per-stand global sine, varies per vertex via phase)
+        const posAttr = st.crowd.geometry.attributes.position as THREE.BufferAttribute;
+        const base = st.crowdBase;
+        const tNow = now * 0.005;
+        for (let i = 0; i < base.length; i += 3) {
+          const ph = base[i] * 0.31 + base[i + 2] * 0.17;
+          posAttr.array[i + 1] = base[i + 1] + Math.sin(tNow + ph) * 0.08 * hypeMul;
+        }
+        posAttr.needsUpdate = true;
+        // Flag waving
+        for (let i = 0; i < st.flags.length; i++) {
+          st.flags[i].rotation.y = Math.sin(now * 0.004 + i * 0.7 + st.phase) * 0.45;
+        }
+        // Decay all active flashes
+        for (const fl of st.flashPool) {
+          if (fl.intensity > 0) fl.intensity = Math.max(0, fl.intensity - dt * 28);
+        }
+        // Spawn a new flash periodically
+        st.flashTimer -= dt * hypeMul;
+        if (st.flashTimer <= 0) {
+          st.flashTimer = 0.25 + Math.random() * 0.7;
+          const free = st.flashPool.find((l) => l.intensity <= 0.01);
+          if (free) {
+            const STAND_W = 64;
+            free.position.set(
+              (Math.random() - 0.5) * STAND_W * 0.9,
+              2 + Math.random() * 4,
+              2 + Math.random() * 8,
+            );
+            free.intensity = 2.4 + Math.random() * 1.2;
+          }
         }
       }
 
@@ -3176,6 +3423,14 @@ export default function RacingGame() {
   return (
     <div className="relative w-full overflow-hidden bg-black touch-none" style={{ height: "100dvh" }}>
       <div ref={mountRef} className="absolute inset-0" />
+      {/* Cinematic vignette — deepens corners for broadcast-style framing */}
+      <div
+        className="absolute inset-0 pointer-events-none z-10"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,0.55) 100%)",
+        }}
+      />
 
       {screen === "menu" && (
         <MainMenu
