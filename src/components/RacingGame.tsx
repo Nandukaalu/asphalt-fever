@@ -630,7 +630,8 @@ export default function RacingGame() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     const W = WEATHERS.find((w) => w.id === weatherId) ?? WEATHERS[0];
-    renderer.toneMappingExposure = W.exposure;
+    // Cinematic tone: pull exposure down for darker, broadcast-style image.
+    renderer.toneMappingExposure = W.exposure * 0.82;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -666,9 +667,10 @@ export default function RacingGame() {
 
     const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 3000);
 
-    const hemi = new THREE.HemisphereLight(W.hemi.sky, W.hemi.ground, W.hemi.intensity);
+    // Lower hemispheric fill for more contrast; sun stays primary key.
+    const hemi = new THREE.HemisphereLight(W.hemi.sky, W.hemi.ground, W.hemi.intensity * 0.72);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(W.sun.color, W.sun.intensity);
+    const sun = new THREE.DirectionalLight(W.sun.color, W.sun.intensity * 1.12);
     sun.position.set(W.sun.pos[0], W.sun.pos[1], W.sun.pos[2]);
     sun.castShadow = true;
     sun.shadow.mapSize.set(isMobile ? 2048 : 4096, isMobile ? 2048 : 4096);
