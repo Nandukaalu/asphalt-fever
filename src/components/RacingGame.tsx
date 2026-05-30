@@ -2978,6 +2978,44 @@ export default function RacingGame() {
         }
       }
 
+      // ---------- Grandstand crowd + flags + camera flashes ----------
+      const lapsLeftNow = totalLaps - (lap - 1);
+      const hypeMul = raceFinished ? 3.5 : lapsLeftNow <= 1 ? 2.2 : 1;
+      for (const st of stands) {
+        // Crowd y-bob (cheap: per-stand global sine, varies per vertex via phase)
+        const posAttr = st.crowd.geometry.attributes.position as THREE.BufferAttribute;
+        const base = st.crowdBase;
+        const tNow = now * 0.005;
+        for (let i = 0; i < base.length; i += 3) {
+          const ph = base[i] * 0.31 + base[i + 2] * 0.17;
+          posAttr.array[i + 1] = base[i + 1] + Math.sin(tNow + ph) * 0.08 * hypeMul;
+        }
+        posAttr.needsUpdate = true;
+        // Flag waving
+        for (let i = 0; i < st.flags.length; i++) {
+          st.flags[i].rotation.y = Math.sin(now * 0.004 + i * 0.7 + st.phase) * 0.45;
+        }
+        // Decay all active flashes
+        for (const fl of st.flashPool) {
+          if (fl.intensity > 0) fl.intensity = Math.max(0, fl.intensity - dt * 28);
+        }
+        // Spawn a new flash periodically
+        st.flashTimer -= dt * hypeMul;
+        if (st.flashTimer <= 0) {
+          st.flashTimer = 0.25 + Math.random() * 0.7;
+          const free = st.flashPool.find((l) => l.intensity <= 0.01);
+          if (free) {
+            const STAND_W = 64;
+            free.position.set(
+              (Math.random() - 0.5) * STAND_W * 0.9,
+              2 + Math.random() * 4,
+              2 + Math.random() * 8,
+            );
+            free.intensity = 2.4 + Math.random() * 1.2;
+          }
+        }
+      }
+
       // Exhaust glow scales with throttle + speed
       const accelInput = (keys["w"] || keys["arrowup"] || touchRef.current.accel) ? 1 : 0;
       const exhaustT = accelInput * Math.min(1, Math.abs(speed) / MAX_SPEED + 0.2);
