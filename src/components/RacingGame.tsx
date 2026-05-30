@@ -2106,6 +2106,20 @@ export default function RacingGame() {
       const side = dx * pitN.x + dz * pitN.z;
       return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
     }
+    // Player must physically drive into this rectangle (off the racing line,
+    // toward the pit side, just before SF) for a pit stop to begin.
+    function isInPitEntryZone(pos: THREE.Vector3) {
+      const dx = pos.x - pitEntryPos.x;
+      const dz = pos.z - pitEntryPos.z;
+      const along = dx * pitForward.x + dz * pitForward.z;
+      const side = dx * pitN.x + dz * pitN.z;
+      // Wide funnel: long along racing direction, narrow toward pit side only.
+      return along > -22 && along < 14 && side > -1.5 && side < 9;
+    }
+    // Precompute the rejoin tangent so the car exits onto the racing line
+    // in the correct direction (not floating outside the map).
+    const _rejoinTan = curve.getTangentAt(0.06).normalize();
+    const trackRejoinHeading = Math.atan2(_rejoinTan.x, _rejoinTan.z);
 
     const onResize = () => {
       const w = mount.clientWidth, h = mount.clientHeight;
