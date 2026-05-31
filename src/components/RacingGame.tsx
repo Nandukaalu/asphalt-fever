@@ -1766,7 +1766,7 @@ export default function RacingGame() {
         metalness: 0.55,
         clearcoat: 0.9,
         clearcoatRoughness: 0.1,
-        envMapIntensity: 1.1,
+        envMapIntensity: 0.7,
       });
       const accent = new THREE.MeshPhysicalMaterial({
         color: d.secondary,
@@ -1774,7 +1774,7 @@ export default function RacingGame() {
         metalness: 0.5,
         clearcoat: 0.7,
         clearcoatRoughness: 0.15,
-        envMapIntensity: 1.0,
+        envMapIntensity: 0.65,
       });
       // Carbon fiber — dark, slightly metallic, low roughness
       const carbon = new THREE.MeshPhysicalMaterial({
