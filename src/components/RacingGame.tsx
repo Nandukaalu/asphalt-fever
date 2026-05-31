@@ -1225,7 +1225,7 @@ export default function RacingGame() {
         const p = curve.getPointAt(tt);
         const tg = curve.getTangentAt(tt).normalize();
         const n = new THREE.Vector3(-tg.z, 0, tg.x);
-        const standPos = p.clone().addScaledVector(n, -(TRACK_WIDTH / 2 + 28));
+        const standPos = p.clone().addScaledVector(n, -(TRACK_WIDTH / 2 + 60));
         const right = new THREE.Vector3(tg.x, 0, tg.z);
         for (let r = 0; r < 6; r++) {
           for (let c2 = 0; c2 < 10; c2++) {
