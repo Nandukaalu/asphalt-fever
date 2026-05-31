@@ -912,6 +912,59 @@ export default function RacingGame() {
     const pitExitPos = pitCenter.clone().addScaledVector(pitForward, 48);
     const trackRejoinPos = curve.getPointAt(0.06);
 
+    // ===== Pit slip roads (entry branch + exit merge) =====
+    // Pit lane sits at pitOffset on +n side of start/finish; build angled
+    // tarmac strips that visibly connect the racing line to the pit entry
+    // and exit so the pit lane reads as part of the circuit (inside map).
+    const slipMat = new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.85, metalness: 0.05 });
+    const buildSlip = (fromOnTrack: THREE.Vector3, toPit: THREE.Vector3) => {
+      const dx = toPit.x - fromOnTrack.x;
+      const dz = toPit.z - fromOnTrack.z;
+      const len = Math.hypot(dx, dz);
+      const ang = Math.atan2(dz, dx);
+      const slip = new THREE.Mesh(new THREE.PlaneGeometry(len, 5.2), slipMat);
+      slip.rotation.x = -Math.PI / 2;
+      slip.rotation.z = -ang;
+      slip.position.set((fromOnTrack.x + toPit.x) / 2, 0.035, (fromOnTrack.z + toPit.z) / 2);
+      slip.receiveShadow = true;
+      scene.add(slip);
+      // dashed white merge guide
+      const dash = new THREE.Mesh(
+        new THREE.PlaneGeometry(len, 0.14),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }),
+      );
+      dash.rotation.x = -Math.PI / 2;
+      dash.rotation.z = -ang;
+      dash.position.set((fromOnTrack.x + toPit.x) / 2, 0.05, (fromOnTrack.z + toPit.z) / 2);
+      scene.add(dash);
+    };
+    // Entry: split off the track ~6% before the line, merge into pit entry
+    const entryTrackPt = curve.getPointAt(0.955)
+      .clone()
+      .addScaledVector(pitN, TRACK_WIDTH / 2 + 0.5);
+    buildSlip(entryTrackPt, pitEntryPos);
+    // Exit: from pit exit gate back onto the track shortly after the line
+    const exitTrackPt = curve.getPointAt(0.06)
+      .clone()
+      .addScaledVector(pitN, TRACK_WIDTH / 2 + 0.5);
+    buildSlip(pitExitPos, exitTrackPt);
+
+    // Pit-wall (between pit lane and racing surface) — keeps cars in lane.
+    const pitWallMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.7, metalness: 0.1, emissive: 0x111827, emissiveIntensity: 0.15 });
+    const pitWall = new THREE.Mesh(new THREE.BoxGeometry(94, 0.9, 0.5), pitWallMat);
+    pitWall.position.copy(pitCenter).addScaledVector(pitN, -3.4).setY(0.45);
+    pitWall.rotation.y = pitHeading;
+    pitWall.castShadow = true; pitWall.receiveShadow = true;
+    scene.add(pitWall);
+    // Sponsor stripes on top of the pit wall
+    const pitWallStripe = new THREE.Mesh(
+      new THREE.BoxGeometry(94, 0.18, 0.52),
+      new THREE.MeshBasicMaterial({ color: 0xff1a2a }),
+    );
+    pitWallStripe.position.copy(pitWall.position).setY(0.95);
+    pitWallStripe.rotation.y = pitHeading;
+    scene.add(pitWallStripe);
+
     // Separate pit-lane entry/exit gates so stops visibly use their own lane.
     const gateMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.8 });
     for (const [gatePos, label] of [[pitEntryPos, "PIT IN"], [pitExitPos, "PIT OUT"]] as const) {
@@ -1056,19 +1109,34 @@ export default function RacingGame() {
       }
     }
 
-    // Grandstands (dark with neon edge)
-    const standMat = new THREE.MeshStandardMaterial({ color: 0x1a1428, roughness: 0.6, metalness: 0.4, emissive: 0x22d3ee, emissiveIntensity: 0.08 });
+    // Grandstands — pushed well off the racing surface behind safety fence.
+    // Larger units on the straights, smaller around major corners.
+    const standMat = new THREE.MeshStandardMaterial({ color: 0x1a1428, roughness: 0.6, metalness: 0.4, emissive: 0x22d3ee, emissiveIntensity: 0.06 });
+    const fenceMat = new THREE.MeshStandardMaterial({ color: 0x2a2f3a, roughness: 0.5, metalness: 0.7, transparent: true, opacity: 0.55 });
+    const STAND_OFFSET = TRACK_WIDTH / 2 + 60; // ≥48m clearance from track edge
+    const FENCE_OFFSET = TRACK_WIDTH / 2 + 6;  // catch-fence outside the kerb
     for (let i = 0; i < 14; i++) {
       const t = i / 14;
       const p = curve.getPointAt(t);
       const tg = curve.getTangentAt(t).normalize();
       const n = new THREE.Vector3(-tg.z, 0, tg.x);
-      const pos = p.clone().addScaledVector(n, -(TRACK_WIDTH / 2 + 28));
-      const stand = new THREE.Mesh(new THREE.BoxGeometry(36, 9, 6), standMat);
-      stand.position.set(pos.x, 4.5, pos.z);
-      stand.lookAt(p.x, 4.5, p.z);
+      // Bigger main grandstands on every other slot (straights/key corners)
+      const isMain = i % 2 === 0;
+      const w = isMain ? 44 : 26;
+      const h = isMain ? 11 : 8;
+      const d = 7;
+      const pos = p.clone().addScaledVector(n, -STAND_OFFSET);
+      const stand = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), standMat);
+      stand.position.set(pos.x, h / 2, pos.z);
+      stand.lookAt(p.x, h / 2, p.z);
       stand.castShadow = true; stand.receiveShadow = true;
       scene.add(stand);
+      // Catch-fence between track and the stand (well inside map)
+      const fencePos = p.clone().addScaledVector(n, -FENCE_OFFSET);
+      const fence = new THREE.Mesh(new THREE.BoxGeometry(w + 6, 4, 0.18), fenceMat);
+      fence.position.set(fencePos.x, 2, fencePos.z);
+      fence.lookAt(p.x, 2, p.z);
+      scene.add(fence);
     }
 
     // ===== Trackside atmosphere: marshals, crowd, photographers, sparks, chopper =====
