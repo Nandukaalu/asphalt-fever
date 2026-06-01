@@ -950,20 +950,30 @@ export default function RacingGame() {
     buildSlip(pitExitPos, exitTrackPt);
 
     // Pit-wall (between pit lane and racing surface) — keeps cars in lane.
+    // Shortened to 60m so the entry/exit slip roads have a clear opening at
+    // both ends of the pit lane (no obstruction blocking the merge).
+    const PIT_WALL_LEN = 60;
     const pitWallMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.7, metalness: 0.1, emissive: 0x111827, emissiveIntensity: 0.15 });
-    const pitWall = new THREE.Mesh(new THREE.BoxGeometry(94, 0.9, 0.5), pitWallMat);
+    const pitWall = new THREE.Mesh(new THREE.BoxGeometry(PIT_WALL_LEN, 0.9, 0.5), pitWallMat);
     pitWall.position.copy(pitCenter).addScaledVector(pitN, -3.4).setY(0.45);
     pitWall.rotation.y = pitHeading;
     pitWall.castShadow = true; pitWall.receiveShadow = true;
     scene.add(pitWall);
     // Sponsor stripes on top of the pit wall
     const pitWallStripe = new THREE.Mesh(
-      new THREE.BoxGeometry(94, 0.18, 0.52),
+      new THREE.BoxGeometry(PIT_WALL_LEN, 0.18, 0.52),
       new THREE.MeshBasicMaterial({ color: 0xff1a2a }),
     );
     pitWallStripe.position.copy(pitWall.position).setY(0.95);
     pitWallStripe.rotation.y = pitHeading;
     scene.add(pitWallStripe);
+
+    // Store slip-road endpoints so the physics step can treat them as
+    // driveable corridor (no off-track drag, no wall collision).
+    const pitSlipEntryA = entryTrackPt.clone();
+    const pitSlipEntryB = pitEntryPos.clone();
+    const pitSlipExitA = pitExitPos.clone();
+    const pitSlipExitB = exitTrackPt.clone();
 
     // Separate pit-lane entry/exit gates so stops visibly use their own lane.
     const gateMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.8 });
