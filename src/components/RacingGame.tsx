@@ -2499,7 +2499,7 @@ export default function RacingGame() {
       speed = Math.max(-15, Math.min(MAX_SPEED * (0.82 + wearGrip * 0.18), speed));
 
       const ct = closestT(carPos);
-      const inPitLaneNow = isInPitLane(carPos);
+      const inPitLaneNow = isInPitCorridor(carPos);
       if (!inPit && !inPitLaneNow && ct.dist > TRACK_WIDTH / 2 + 1.5) {
         speed -= Math.sign(speed) * Math.min(Math.abs(speed), OFF_TRACK_DRAG * dt);
       }
@@ -2528,7 +2528,7 @@ export default function RacingGame() {
       // component (no bounce), apply friction to tangent, scale loss with how
       // head-on the impact is. Heavier cars / faster impacts bleed more energy.
       const ct2 = closestT(carPos);
-      const inPitLaneAfterMove = isInPitLane(carPos);
+      const inPitLaneAfterMove = isInPitCorridor(carPos);
       if (!inPit && !inPitLaneAfterMove && ct2.dist > WALL_LIMIT) {
         const center = centerline[ct2.idx];
         const dx = carPos.x - center.x;
