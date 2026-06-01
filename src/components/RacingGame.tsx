@@ -2232,6 +2232,7 @@ export default function RacingGame() {
     let pitStopArmed = true;
     let pitEntryAnnounced = false;
     let previousPitLocal = pitBoxLocal(carPos);
+    const pitServicePos = pitBoxPos.clone();
 
     function beginPitService() {
       if (pitActiveRef.current || !pitStopArmed) return;
@@ -2248,6 +2249,9 @@ export default function RacingGame() {
       );
       pitActiveRef.current = true;
       setPitActive(true);
+      pitServicePos.copy(carPos);
+      pitCrewGroup.position.copy(pitServicePos);
+      pitCrewGroup.rotation.y = pitBoxHeading;
       pitBoxStart = performance.now();
       setPitProgress(0);
       setPitTimeLeft(pitDurationMs / 1000);
