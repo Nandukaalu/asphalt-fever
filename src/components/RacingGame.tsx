@@ -2387,25 +2387,20 @@ export default function RacingGame() {
         const prog = Math.min(1, elapsed / pitDurationMs);
         setPitTimeLeft(Math.max(0, (pitDurationMs - elapsed) / 1000));
         setPitProgress(prog);
-        // Drive into pit box, get serviced, drive back out
-        pitCrewGroup.visible = prog > 0.12 && prog < 0.92;
-        if (prog < 0.18) {
-          // Phase 1: glide diagonally into the pit box
-          const k = Math.min(1, dt * 4);
-          carPos.x += (pitBoxPos.x - carPos.x) * k;
-          carPos.z += (pitBoxPos.z - carPos.z) * k;
-          // Rotate heading toward pit heading
+        // Service phase — car is parked at the box the player drove into.
+        // No teleports: position is held where the player stopped, heading
+        // softly aligned to the pit-lane direction so the crew animation
+        // reads correctly.
+        pitCrewGroup.visible = prog > 0.05 && prog < 0.95;
+        {
+          // Hold the car at the box the player drove into.
+          carPos.x = pitBoxPos.x;
+          carPos.z = pitBoxPos.z;
           let dh = pitBoxHeading - heading;
           while (dh > Math.PI) dh -= Math.PI * 2;
           while (dh < -Math.PI) dh += Math.PI * 2;
-          heading += dh * Math.min(1, dt * 5);
-          pitLiftY = 0;
-        } else if (prog < 0.85) {
-          // Phase 2: serviced — locked in box, jack lifts car, tires swap
-          carPos.x = pitBoxPos.x;
-          carPos.z = pitBoxPos.z;
-          heading = pitBoxHeading;
-          const lp = (prog - 0.18) / 0.67; // 0..1
+          heading += dh * Math.min(1, dt * 6);
+          const lp = prog; // 0..1 over the whole service window
           let lift = 0;
           if (lp < 0.18) lift = (lp / 0.18) * 0.32;
           else if (lp > 0.82) lift = ((1 - lp) / 0.18) * 0.32;
@@ -2433,17 +2428,6 @@ export default function RacingGame() {
           crewMembers.forEach((c, i) => {
             c.position.y = Math.abs(Math.sin(now * 0.012 + i)) * 0.08;
           });
-        } else {
-          // Phase 3: jack down, drive out of pit lane back onto track
-          pitLiftY = 0;
-          jack.position.y = 0.08;
-          jack.scale.y = 1;
-          spareTires.forEach((tt) => (tt.visible = false));
-          player.wheels.forEach((w) => (w.visible = true));
-          const exit = prog < 0.95 ? pitExitPos : trackRejoinPos;
-          const k = Math.min(1, dt * 4);
-          carPos.x += (exit.x - carPos.x) * k;
-          carPos.z += (exit.z - carPos.z) * k;
         }
         if (elapsed >= pitDurationMs) {
           pitStopsRef.current += 1;
@@ -2454,12 +2438,12 @@ export default function RacingGame() {
           setPitTimeLeft(0);
           setPitRequested(false);
           pitRequestedRef.current = false;
-          speed = 8;
+          // Hand control back to the player at the box — they drive out
+          // of the pit lane manually. No teleport to exit / rejoin point.
+          speed = 0;
           tireWear = 0;
           setTyreWearHud(0);
           pitLiftY = 0;
-          carPos.copy(pitExitPos);
-          heading = pitBoxHeading;
           pitCrewGroup.visible = false;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
