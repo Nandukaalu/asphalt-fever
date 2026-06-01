@@ -2185,6 +2185,25 @@ export default function RacingGame() {
       const side = dx * pitN.x + dz * pitN.z;
       return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
     }
+    function distToSegSq(px: number, pz: number, ax: number, az: number, bx: number, bz: number) {
+      const dx = bx - ax, dz = bz - az;
+      const lenSq = dx * dx + dz * dz || 1;
+      let t = ((px - ax) * dx + (pz - az) * dz) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      const cx = ax + dx * t, cz = az + dz * t;
+      const ex = px - cx, ez = pz - cz;
+      return ex * ex + ez * ez;
+    }
+    // True when the car is on the pit lane OR on either of the slip roads
+    // that connect the lane to the racing surface. These count as driveable
+    // pit-corridor — no off-track drag and no wall collision applies.
+    function isInPitCorridor(pos: THREE.Vector3) {
+      if (isInPitLane(pos)) return true;
+      const SLIP_HALF_SQ = 3.2 * 3.2;
+      if (distToSegSq(pos.x, pos.z, pitSlipEntryA.x, pitSlipEntryA.z, pitSlipEntryB.x, pitSlipEntryB.z) <= SLIP_HALF_SQ) return true;
+      if (distToSegSq(pos.x, pos.z, pitSlipExitA.x, pitSlipExitA.z, pitSlipExitB.x, pitSlipExitB.z) <= SLIP_HALF_SQ) return true;
+      return false;
+    }
 
     const onResize = () => {
       const w = mount.clientWidth, h = mount.clientHeight;
