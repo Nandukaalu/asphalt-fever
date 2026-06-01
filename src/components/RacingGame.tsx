@@ -2579,13 +2579,12 @@ export default function RacingGame() {
           && previousPitLocal.along < -4.2
           && currentPitLocal.along > 4.2;
         const stoppedInBox = Math.abs(speed) < 8 && Math.abs(currentPitLocal.along) <= 5.2 && Math.abs(currentPitLocal.side) <= 3.35;
-        const slowEnoughForCrew = Math.abs(speed) < 34;
+        const safePitSpeed = Math.abs(speed) < 34;
         if (
           pitStopArmed &&
           pitStopsRef.current < availablePitStops &&
           (pitRequestedRef.current || requiredStops > pitStopsRef.current || inServiceZone) &&
-          slowEnoughForCrew &&
-          (inServiceZone || crossedCenter || crossedTriggerBand || stoppedInBox)
+          ((safePitSpeed && inServiceZone) || crossedCenter || crossedTriggerBand || stoppedInBox)
         ) {
           beginPitService();
         }
