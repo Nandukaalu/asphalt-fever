@@ -876,6 +876,24 @@ export default function RacingGame() {
       stripe.position.copy(pitCenter).addScaledVector(pitN, side * 3).setY(0.05);
       scene.add(stripe);
     }
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.78 });
+    const arrowShape = new THREE.Shape();
+    arrowShape.moveTo(0, 1.15);
+    arrowShape.lineTo(1.05, -0.25);
+    arrowShape.lineTo(0.34, -0.25);
+    arrowShape.lineTo(0.34, -1.15);
+    arrowShape.lineTo(-0.34, -1.15);
+    arrowShape.lineTo(-0.34, -0.25);
+    arrowShape.lineTo(-1.05, -0.25);
+    arrowShape.lineTo(0, 1.15);
+    const arrowGeo = new THREE.ShapeGeometry(arrowShape);
+    for (const along of [-34, -20, -6, 8, 22, 36]) {
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat.clone());
+      arrow.rotation.x = -Math.PI / 2;
+      arrow.rotation.z = -pitHeading;
+      arrow.position.copy(pitCenter).addScaledVector(pitForward, along).addScaledVector(pitN, -0.8).setY(0.083);
+      scene.add(arrow);
+    }
     // Three pit boxes with team markings, a highlighted service trigger zone,
     // and visible crews standing ready so the box reads as a real stop area.
     const garageMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.7, metalness: 0.3, emissive: 0x22d3ee, emissiveIntensity: 0.05 });
