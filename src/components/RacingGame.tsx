@@ -2540,6 +2540,7 @@ export default function RacingGame() {
           setPitTimeLeft(0);
           setPitRequested(false);
           pitRequestedRef.current = false;
+          setPitIndicator("Service complete — pit exit clear");
           // Hand control back to the player at the box — they drive out
           // of the pit lane manually. No teleport to exit / rejoin point.
           speed = 0;
