@@ -2556,39 +2556,41 @@ export default function RacingGame() {
         }
       }
 
-      // ---------- Pit-box proximity trigger (no teleport) ----------
-      // Player has requested a pit, is driving in the pit lane, and has
-      // parked near the box at low speed → begin the service timer right
-      // where they stopped. The car is held in place during the service
-      // and released afterwards to drive out manually.
-      if (
-        !isQualifying &&
-        !raceFinished &&
-        pitRequestedRef.current &&
-        !pitActiveRef.current &&
-        isInPitLane(carPos)
-      ) {
-        const dxBox = carPos.x - pitBoxPos.x;
-        const dzBox = carPos.z - pitBoxPos.z;
-        const distBoxSq = dxBox * dxBox + dzBox * dzBox;
-        if (distBoxSq < 4 * 4 && Math.abs(speed) < 6) {
-          const roll = Math.random();
-          pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
-          pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
-            pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
-          );
-          setPitStatus(
-            pitIssue === "slow-gun" ? "Wheel gun delay" :
-            pitIssue === "stuck-tyre" ? "Stuck tyre" :
-            pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
-          );
-          pitActiveRef.current = true;
-          setPitActive(true);
-          pitBoxStart = now;
-          setPitProgress(0);
-          setPitTimeLeft(pitDurationMs / 1000);
+      // ---------- Pit-box trigger zone (no teleport, no pixel-perfect stop) ----------
+      const currentPitLocal = pitBoxLocal(carPos);
+      const playerInPitLane = isInPitLane(carPos);
+      const availablePitStops = Math.max(requiredStops, 3);
+      if (!playerInPitLane && !pitActiveRef.current) {
+        pitStopArmed = true;
+        pitEntryAnnounced = false;
+        previousPitLocal = currentPitLocal;
+      }
+      if (!isQualifying && !raceFinished && !pitActiveRef.current && playerInPitLane) {
+        if (!pitEntryAnnounced) {
+          pitEntryAnnounced = true;
+          setPitIndicator("Pit lane — aim for your highlighted box");
+        }
+        const inServiceZone = isInsidePitServiceZone(carPos);
+        const crossedCenter = Math.abs(currentPitLocal.side) <= 3.35
+          && Math.abs(previousPitLocal.side) <= 4.25
+          && previousPitLocal.along <= -0.35
+          && currentPitLocal.along >= -0.35;
+        const crossedTriggerBand = Math.abs(currentPitLocal.side) <= 3.35
+          && previousPitLocal.along < -4.2
+          && currentPitLocal.along > 4.2;
+        const stoppedInBox = Math.abs(speed) < 8 && Math.abs(currentPitLocal.along) <= 5.2 && Math.abs(currentPitLocal.side) <= 3.35;
+        const slowEnoughForCrew = Math.abs(speed) < 34;
+        if (
+          pitStopArmed &&
+          pitStopsRef.current < availablePitStops &&
+          (pitRequestedRef.current || requiredStops > pitStopsRef.current || inServiceZone) &&
+          slowEnoughForCrew &&
+          (inServiceZone || crossedCenter || crossedTriggerBand || stoppedInBox)
+        ) {
+          beginPitService();
         }
       }
+      previousPitLocal = currentPitLocal;
 
       const keySteer = (leftKey ? 1 : 0) - (rightKey ? 1 : 0);
       const steerInput = keySteer !== 0 ? keySteer : -t.steer;
