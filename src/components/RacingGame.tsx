@@ -3587,6 +3587,7 @@ export default function RacingGame() {
                   {remaining > 0 && pitRequested && !pitActive && (
                     <div className="text-[9px] text-yellow-300 mt-1 uppercase tracking-widest">Box this lap</div>
                   )}
+                  <div className="mt-1 text-[9px] uppercase tracking-widest text-cyan-200 max-w-28 leading-tight">{pitIndicator}</div>
                   </>}
                 </>
               );
@@ -3601,7 +3602,15 @@ export default function RacingGame() {
             return (
               <button
                 type="button"
-                onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); setPitRequested((p) => !p); }}
+                onPointerUp={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setPitRequested((p) => {
+                    const next = !p;
+                    setPitIndicator(next ? "Box confirmed — enter pit lane" : "Pit request cancelled");
+                    return next;
+                  });
+                }}
                 onClick={(e) => { e.stopPropagation(); }}
                 style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
                 className={`absolute top-3 right-3 z-40 min-h-[48px] min-w-[96px] px-5 py-3 font-mono uppercase text-sm font-bold tracking-widest border-2 backdrop-blur transition-all select-none active:scale-95
