@@ -3587,8 +3587,8 @@ export default function RacingGame() {
                   {remaining > 0 && pitRequested && !pitActive && (
                     <div className="text-[9px] text-yellow-300 mt-1 uppercase tracking-widest">Box this lap</div>
                   )}
-                  <div className="mt-1 text-[9px] uppercase tracking-widest text-cyan-200 max-w-28 leading-tight">{pitIndicator}</div>
                   </>}
+                  <div className="mt-1 text-[9px] uppercase tracking-widest text-cyan-200 max-w-28 leading-tight">{pitIndicator}</div>
                 </>
               );
             })()}
