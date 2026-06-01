@@ -3638,10 +3638,11 @@ export default function RacingGame() {
                     style={{ width: `${pitProgress * 100}%` }}
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-2 mt-4 text-[9px] uppercase tracking-widest text-white/60">
+                <div className="grid grid-cols-4 gap-2 mt-4 text-[9px] uppercase tracking-widest text-white/60">
                   <div className={pitProgress > 0.15 ? "text-emerald-300" : ""}>● Jack Up</div>
                   <div className={pitProgress > 0.55 ? "text-emerald-300" : ""}>● New Tires</div>
-                  <div className={pitProgress > 0.9 ? "text-emerald-300" : ""}>● Refuel</div>
+                  <div className={pitProgress > 0.72 ? "text-emerald-300" : ""}>● Repairs</div>
+                  <div className={pitProgress > 0.9 ? "text-emerald-300" : ""}>● Fuel</div>
                 </div>
               </div>
             </div>
