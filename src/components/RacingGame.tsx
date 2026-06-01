@@ -2224,11 +2224,35 @@ export default function RacingGame() {
 
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
-    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0); setPitTimeLeft(0); setPitStatus("Clean stop"); setTyreWearHud(0);
+    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0); setPitTimeLeft(0); setPitStatus("Clean stop"); setTyreWearHud(0); setPitIndicator("Pit lane open");
     pitStopsRef.current = 0; pitRequestedRef.current = false; pitActiveRef.current = false;
     let pitBoxStart = 0; // ms when current pit stop began
     let pitDurationMs = 5000;
     let pitIssue: "clean" | "slow-gun" | "stuck-tyre" | "unsafe-delay" = "clean";
+    let pitStopArmed = true;
+    let pitEntryAnnounced = false;
+    let previousPitLocal = pitBoxLocal(carPos);
+
+    function beginPitService() {
+      if (pitActiveRef.current || !pitStopArmed) return;
+      pitStopArmed = false;
+      const roll = Math.random();
+      pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
+      pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
+        pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
+      );
+      setPitStatus(
+        pitIssue === "slow-gun" ? "Wheel gun delay" :
+        pitIssue === "stuck-tyre" ? "Stuck tyre" :
+        pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
+      );
+      pitActiveRef.current = true;
+      setPitActive(true);
+      pitBoxStart = performance.now();
+      setPitProgress(0);
+      setPitTimeLeft(pitDurationMs / 1000);
+      setPitIndicator("Service started");
+    }
 
     function closestT(pos: THREE.Vector3) {
       let best = 0, bestD = Infinity;
