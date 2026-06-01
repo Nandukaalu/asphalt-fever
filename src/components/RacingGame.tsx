@@ -2247,6 +2247,18 @@ export default function RacingGame() {
       const side = dx * pitN.x + dz * pitN.z;
       return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
     }
+    function pitBoxLocal(pos: THREE.Vector3) {
+      const dx = pos.x - pitBoxPos.x;
+      const dz = pos.z - pitBoxPos.z;
+      return {
+        along: dx * pitForward.x + dz * pitForward.z,
+        side: dx * pitN.x + dz * pitN.z,
+      };
+    }
+    function isInsidePitServiceZone(pos: THREE.Vector3) {
+      const local = pitBoxLocal(pos);
+      return Math.abs(local.along) <= 4.2 && Math.abs(local.side) <= 2.85;
+    }
     function distToSegSq(px: number, pz: number, ax: number, az: number, bx: number, bz: number) {
       const dx = bx - ax, dz = bz - az;
       const lenSq = dx * dx + dz * dz || 1;
