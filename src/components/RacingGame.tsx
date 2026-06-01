@@ -2495,9 +2495,9 @@ export default function RacingGame() {
         // reads correctly.
         pitCrewGroup.visible = prog > 0.05 && prog < 0.95;
         {
-          // Hold the car at the box the player drove into.
-          carPos.x = pitBoxPos.x;
-          carPos.z = pitBoxPos.z;
+          // Hold the car inside the service zone the player actually crossed.
+          carPos.x = pitServicePos.x;
+          carPos.z = pitServicePos.z;
           let dh = pitBoxHeading - heading;
           while (dh > Math.PI) dh -= Math.PI * 2;
           while (dh < -Math.PI) dh += Math.PI * 2;
