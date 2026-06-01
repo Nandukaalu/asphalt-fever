@@ -876,21 +876,54 @@ export default function RacingGame() {
       stripe.position.copy(pitCenter).addScaledVector(pitN, side * 3).setY(0.05);
       scene.add(stripe);
     }
-    // Three pit boxes (white squares) + small garage walls behind
+    // Three pit boxes with team markings, a highlighted service trigger zone,
+    // and visible crews standing ready so the box reads as a real stop area.
     const garageMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.7, metalness: 0.3, emissive: 0x22d3ee, emissiveIntensity: 0.05 });
     const pitBoxPositions: THREE.Vector3[] = [];
+    const pitTeams = [allDrivers[3] ?? driver, driver, allDrivers[1] ?? driver];
     for (let i = -1; i <= 1; i++) {
       const center = pitCenter.clone().addScaledVector(pitForward, i * 9);
+      const team = pitTeams[i + 1] ?? driver;
       pitBoxPositions.push(center.clone());
-      // Box outline (white square)
       const box = new THREE.Mesh(
-        new THREE.PlaneGeometry(5.4, 5.4),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18 }),
+        new THREE.PlaneGeometry(8.2, 6.0),
+        new THREE.MeshBasicMaterial({ color: team.primary, transparent: true, opacity: i === 0 ? 0.34 : 0.16 }),
       );
       box.rotation.x = -Math.PI / 2;
       box.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
       box.position.copy(center).addScaledVector(pitN, 0).setY(0.06);
       scene.add(box);
+      const outlineMat = new THREE.MeshBasicMaterial({ color: i === 0 ? 0xfacc15 : 0xffffff, transparent: true, opacity: i === 0 ? 0.95 : 0.45 });
+      for (const [ox, oz, sx, sz] of [[0, -3, 8.2, 0.16], [0, 3, 8.2, 0.16], [-4.1, 0, 0.16, 6], [4.1, 0, 0.16, 6]] as const) {
+        const line = new THREE.Mesh(new THREE.PlaneGeometry(sx, sz), outlineMat.clone());
+        line.rotation.x = -Math.PI / 2;
+        line.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+        line.position.copy(center).addScaledVector(pitForward, ox).addScaledVector(pitN, oz).setY(0.082);
+        scene.add(line);
+      }
+      if (i === 0) {
+        const trigger = new THREE.Mesh(
+          new THREE.PlaneGeometry(6.8, 4.4),
+          new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.26 }),
+        );
+        trigger.rotation.x = -Math.PI / 2;
+        trigger.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+        trigger.position.copy(center).setY(0.095);
+        scene.add(trigger);
+      }
+      const labelCv = document.createElement("canvas");
+      labelCv.width = 256; labelCv.height = 64;
+      const bctx = labelCv.getContext("2d")!;
+      bctx.fillStyle = "rgba(0,0,0,0.74)"; bctx.fillRect(0, 0, 256, 64);
+      bctx.fillStyle = `#${team.primary.toString(16).padStart(6, "0")}`; bctx.fillRect(0, 0, 256, 8);
+      bctx.fillStyle = i === 0 ? "#facc15" : "#ffffff";
+      bctx.font = "bold 22px sans-serif"; bctx.textAlign = "center"; bctx.textBaseline = "middle";
+      bctx.fillText(i === 0 ? "YOUR BOX" : team.team.slice(0, 16).toUpperCase(), 128, 34);
+      const marker = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 1.55), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(labelCv), transparent: true }));
+      marker.position.copy(center).addScaledVector(pitN, 3.55).setY(0.1);
+      marker.rotation.x = -Math.PI / 2;
+      marker.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+      scene.add(marker);
       // Garage wall behind box
       const wall = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 1.2), garageMat);
       wall.position.copy(center).addScaledVector(pitN, 4.2).setY(2);
@@ -905,6 +938,16 @@ export default function RacingGame() {
       lite.position.copy(center).addScaledVector(pitN, 3.7).setY(3.4);
       lite.lookAt(center.x, 3.4, center.z);
       scene.add(lite);
+      for (const side of [-1, 1]) {
+        const ready = new THREE.Group();
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.58, 0.24), new THREE.MeshStandardMaterial({ color: team.primary, roughness: 0.55, emissive: team.primary, emissiveIntensity: i === 0 ? 0.08 : 0.03 }));
+        torso.position.y = 0.58; ready.add(torso);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.34 }));
+        head.position.y = 1.02; ready.add(head);
+        ready.position.copy(center).addScaledVector(pitForward, side * 2.45).addScaledVector(pitN, 2.55).setY(0);
+        ready.lookAt(center.x, 0.7, center.z);
+        scene.add(ready);
+      }
     }
     // Player's box = middle one
     const pitBoxPos = pitBoxPositions[1].clone();
