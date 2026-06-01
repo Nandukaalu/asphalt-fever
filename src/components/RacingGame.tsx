@@ -377,6 +377,7 @@ export default function RacingGame() {
   const [pitTimeLeft, setPitTimeLeft] = useState(0);
   const [pitStatus, setPitStatus] = useState("Clean stop");
   const [tyreWearHud, setTyreWearHud] = useState(0);
+  const [pitIndicator, setPitIndicator] = useState("Pit lane open");
   const pitRequestedRef = useRef(false);
   const pitActiveRef = useRef(false);
   const pitStopsRef = useRef(0);
