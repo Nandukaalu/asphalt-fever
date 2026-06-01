@@ -950,20 +950,30 @@ export default function RacingGame() {
     buildSlip(pitExitPos, exitTrackPt);
 
     // Pit-wall (between pit lane and racing surface) — keeps cars in lane.
+    // Shortened to 60m so the entry/exit slip roads have a clear opening at
+    // both ends of the pit lane (no obstruction blocking the merge).
+    const PIT_WALL_LEN = 60;
     const pitWallMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.7, metalness: 0.1, emissive: 0x111827, emissiveIntensity: 0.15 });
-    const pitWall = new THREE.Mesh(new THREE.BoxGeometry(94, 0.9, 0.5), pitWallMat);
+    const pitWall = new THREE.Mesh(new THREE.BoxGeometry(PIT_WALL_LEN, 0.9, 0.5), pitWallMat);
     pitWall.position.copy(pitCenter).addScaledVector(pitN, -3.4).setY(0.45);
     pitWall.rotation.y = pitHeading;
     pitWall.castShadow = true; pitWall.receiveShadow = true;
     scene.add(pitWall);
     // Sponsor stripes on top of the pit wall
     const pitWallStripe = new THREE.Mesh(
-      new THREE.BoxGeometry(94, 0.18, 0.52),
+      new THREE.BoxGeometry(PIT_WALL_LEN, 0.18, 0.52),
       new THREE.MeshBasicMaterial({ color: 0xff1a2a }),
     );
     pitWallStripe.position.copy(pitWall.position).setY(0.95);
     pitWallStripe.rotation.y = pitHeading;
     scene.add(pitWallStripe);
+
+    // Store slip-road endpoints so the physics step can treat them as
+    // driveable corridor (no off-track drag, no wall collision).
+    const pitSlipEntryA = entryTrackPt.clone();
+    const pitSlipEntryB = pitEntryPos.clone();
+    const pitSlipExitA = pitExitPos.clone();
+    const pitSlipExitB = exitTrackPt.clone();
 
     // Separate pit-lane entry/exit gates so stops visibly use their own lane.
     const gateMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.8 });
@@ -2175,6 +2185,25 @@ export default function RacingGame() {
       const side = dx * pitN.x + dz * pitN.z;
       return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
     }
+    function distToSegSq(px: number, pz: number, ax: number, az: number, bx: number, bz: number) {
+      const dx = bx - ax, dz = bz - az;
+      const lenSq = dx * dx + dz * dz || 1;
+      let t = ((px - ax) * dx + (pz - az) * dz) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      const cx = ax + dx * t, cz = az + dz * t;
+      const ex = px - cx, ez = pz - cz;
+      return ex * ex + ez * ez;
+    }
+    // True when the car is on the pit lane OR on either of the slip roads
+    // that connect the lane to the racing surface. These count as driveable
+    // pit-corridor — no off-track drag and no wall collision applies.
+    function isInPitCorridor(pos: THREE.Vector3) {
+      if (isInPitLane(pos)) return true;
+      const SLIP_HALF_SQ = 3.2 * 3.2;
+      if (distToSegSq(pos.x, pos.z, pitSlipEntryA.x, pitSlipEntryA.z, pitSlipEntryB.x, pitSlipEntryB.z) <= SLIP_HALF_SQ) return true;
+      if (distToSegSq(pos.x, pos.z, pitSlipExitA.x, pitSlipExitA.z, pitSlipExitB.x, pitSlipExitB.z) <= SLIP_HALF_SQ) return true;
+      return false;
+    }
 
     const onResize = () => {
       const w = mount.clientWidth, h = mount.clientHeight;
@@ -2358,25 +2387,20 @@ export default function RacingGame() {
         const prog = Math.min(1, elapsed / pitDurationMs);
         setPitTimeLeft(Math.max(0, (pitDurationMs - elapsed) / 1000));
         setPitProgress(prog);
-        // Drive into pit box, get serviced, drive back out
-        pitCrewGroup.visible = prog > 0.12 && prog < 0.92;
-        if (prog < 0.18) {
-          // Phase 1: glide diagonally into the pit box
-          const k = Math.min(1, dt * 4);
-          carPos.x += (pitBoxPos.x - carPos.x) * k;
-          carPos.z += (pitBoxPos.z - carPos.z) * k;
-          // Rotate heading toward pit heading
+        // Service phase — car is parked at the box the player drove into.
+        // No teleports: position is held where the player stopped, heading
+        // softly aligned to the pit-lane direction so the crew animation
+        // reads correctly.
+        pitCrewGroup.visible = prog > 0.05 && prog < 0.95;
+        {
+          // Hold the car at the box the player drove into.
+          carPos.x = pitBoxPos.x;
+          carPos.z = pitBoxPos.z;
           let dh = pitBoxHeading - heading;
           while (dh > Math.PI) dh -= Math.PI * 2;
           while (dh < -Math.PI) dh += Math.PI * 2;
-          heading += dh * Math.min(1, dt * 5);
-          pitLiftY = 0;
-        } else if (prog < 0.85) {
-          // Phase 2: serviced — locked in box, jack lifts car, tires swap
-          carPos.x = pitBoxPos.x;
-          carPos.z = pitBoxPos.z;
-          heading = pitBoxHeading;
-          const lp = (prog - 0.18) / 0.67; // 0..1
+          heading += dh * Math.min(1, dt * 6);
+          const lp = prog; // 0..1 over the whole service window
           let lift = 0;
           if (lp < 0.18) lift = (lp / 0.18) * 0.32;
           else if (lp > 0.82) lift = ((1 - lp) / 0.18) * 0.32;
@@ -2404,17 +2428,6 @@ export default function RacingGame() {
           crewMembers.forEach((c, i) => {
             c.position.y = Math.abs(Math.sin(now * 0.012 + i)) * 0.08;
           });
-        } else {
-          // Phase 3: jack down, drive out of pit lane back onto track
-          pitLiftY = 0;
-          jack.position.y = 0.08;
-          jack.scale.y = 1;
-          spareTires.forEach((tt) => (tt.visible = false));
-          player.wheels.forEach((w) => (w.visible = true));
-          const exit = prog < 0.95 ? pitExitPos : trackRejoinPos;
-          const k = Math.min(1, dt * 4);
-          carPos.x += (exit.x - carPos.x) * k;
-          carPos.z += (exit.z - carPos.z) * k;
         }
         if (elapsed >= pitDurationMs) {
           pitStopsRef.current += 1;
@@ -2425,18 +2438,52 @@ export default function RacingGame() {
           setPitTimeLeft(0);
           setPitRequested(false);
           pitRequestedRef.current = false;
-          speed = 8;
+          // Hand control back to the player at the box — they drive out
+          // of the pit lane manually. No teleport to exit / rejoin point.
+          speed = 0;
           tireWear = 0;
           setTyreWearHud(0);
           pitLiftY = 0;
-          carPos.copy(pitExitPos);
-          heading = pitBoxHeading;
           pitCrewGroup.visible = false;
           spareTires.forEach((tt) => (tt.visible = false));
           player.wheels.forEach((w) => (w.visible = true));
           if (pitIssue === "clean") sayEngineer(ENGINEER_LINES.pitClean(), "good");
           else sayEngineer(ENGINEER_LINES.pitMessy(), "alert");
           pitRecSaid = false;
+        }
+      }
+
+      // ---------- Pit-box proximity trigger (no teleport) ----------
+      // Player has requested a pit, is driving in the pit lane, and has
+      // parked near the box at low speed → begin the service timer right
+      // where they stopped. The car is held in place during the service
+      // and released afterwards to drive out manually.
+      if (
+        !isQualifying &&
+        !raceFinished &&
+        pitRequestedRef.current &&
+        !pitActiveRef.current &&
+        isInPitLane(carPos)
+      ) {
+        const dxBox = carPos.x - pitBoxPos.x;
+        const dzBox = carPos.z - pitBoxPos.z;
+        const distBoxSq = dxBox * dxBox + dzBox * dzBox;
+        if (distBoxSq < 4 * 4 && Math.abs(speed) < 6) {
+          const roll = Math.random();
+          pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
+          pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
+            pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
+          );
+          setPitStatus(
+            pitIssue === "slow-gun" ? "Wheel gun delay" :
+            pitIssue === "stuck-tyre" ? "Stuck tyre" :
+            pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
+          );
+          pitActiveRef.current = true;
+          setPitActive(true);
+          pitBoxStart = now;
+          setPitProgress(0);
+          setPitTimeLeft(pitDurationMs / 1000);
         }
       }
 
@@ -2470,7 +2517,7 @@ export default function RacingGame() {
       speed = Math.max(-15, Math.min(MAX_SPEED * (0.82 + wearGrip * 0.18), speed));
 
       const ct = closestT(carPos);
-      const inPitLaneNow = isInPitLane(carPos);
+      const inPitLaneNow = isInPitCorridor(carPos);
       if (!inPit && !inPitLaneNow && ct.dist > TRACK_WIDTH / 2 + 1.5) {
         speed -= Math.sign(speed) * Math.min(Math.abs(speed), OFF_TRACK_DRAG * dt);
       }
@@ -2499,7 +2546,7 @@ export default function RacingGame() {
       // component (no bounce), apply friction to tangent, scale loss with how
       // head-on the impact is. Heavier cars / faster impacts bleed more energy.
       const ct2 = closestT(carPos);
-      const inPitLaneAfterMove = isInPitLane(carPos);
+      const inPitLaneAfterMove = isInPitCorridor(carPos);
       if (!inPit && !inPitLaneAfterMove && ct2.dist > WALL_LIMIT) {
         const center = centerline[ct2.idx];
         const dx = carPos.x - center.x;
@@ -2614,27 +2661,10 @@ export default function RacingGame() {
           if (isQualifying && bestLap === lapTime) {
             sayEngineer(ENGINEER_LINES.poleLap(), "good");
           }
-          // Begin a pit stop if requested and the race isn't over yet
-          if (!isQualifying && pitRequestedRef.current && !raceFinished && !pitActiveRef.current) {
-            const roll = Math.random();
-            pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
-            pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
-              pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
-            );
-            setPitStatus(
-              pitIssue === "slow-gun" ? "Wheel gun delay" :
-              pitIssue === "stuck-tyre" ? "Stuck tyre" :
-              pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
-            );
-            pitActiveRef.current = true;
-            setPitActive(true);
-            carPos.copy(pitEntryPos);
-            heading = pitBoxHeading;
-            speed = 6;
-            pitBoxStart = now;
-            setPitProgress(0);
-            setPitTimeLeft(pitDurationMs / 1000);
-          }
+          // Note: pit stops are no longer auto-triggered at the start/finish
+          // line. The player must physically drive into the pit lane, follow
+          // the slip road, and stop at their pit box — see the proximity
+          // trigger below.
         }
         // If sectors weren't all hit, the line crossing is ignored — no lap.
       }
