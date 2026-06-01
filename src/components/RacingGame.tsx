@@ -377,6 +377,7 @@ export default function RacingGame() {
   const [pitTimeLeft, setPitTimeLeft] = useState(0);
   const [pitStatus, setPitStatus] = useState("Clean stop");
   const [tyreWearHud, setTyreWearHud] = useState(0);
+  const [pitIndicator, setPitIndicator] = useState("Pit lane open");
   const pitRequestedRef = useRef(false);
   const pitActiveRef = useRef(false);
   const pitStopsRef = useRef(0);
@@ -875,21 +876,72 @@ export default function RacingGame() {
       stripe.position.copy(pitCenter).addScaledVector(pitN, side * 3).setY(0.05);
       scene.add(stripe);
     }
-    // Three pit boxes (white squares) + small garage walls behind
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.78 });
+    const arrowShape = new THREE.Shape();
+    arrowShape.moveTo(0, 1.15);
+    arrowShape.lineTo(1.05, -0.25);
+    arrowShape.lineTo(0.34, -0.25);
+    arrowShape.lineTo(0.34, -1.15);
+    arrowShape.lineTo(-0.34, -1.15);
+    arrowShape.lineTo(-0.34, -0.25);
+    arrowShape.lineTo(-1.05, -0.25);
+    arrowShape.lineTo(0, 1.15);
+    const arrowGeo = new THREE.ShapeGeometry(arrowShape);
+    for (const along of [-34, -20, -6, 8, 22, 36]) {
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat.clone());
+      arrow.rotation.x = -Math.PI / 2;
+      arrow.rotation.z = -pitHeading;
+      arrow.position.copy(pitCenter).addScaledVector(pitForward, along).addScaledVector(pitN, -0.8).setY(0.083);
+      scene.add(arrow);
+    }
+    // Three pit boxes with team markings, a highlighted service trigger zone,
+    // and visible crews standing ready so the box reads as a real stop area.
     const garageMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.7, metalness: 0.3, emissive: 0x22d3ee, emissiveIntensity: 0.05 });
     const pitBoxPositions: THREE.Vector3[] = [];
+    const pitTeams = [allDrivers[3] ?? driver, driver, allDrivers[1] ?? driver];
     for (let i = -1; i <= 1; i++) {
       const center = pitCenter.clone().addScaledVector(pitForward, i * 9);
+      const team = pitTeams[i + 1] ?? driver;
       pitBoxPositions.push(center.clone());
-      // Box outline (white square)
       const box = new THREE.Mesh(
-        new THREE.PlaneGeometry(5.4, 5.4),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18 }),
+        new THREE.PlaneGeometry(8.2, 6.0),
+        new THREE.MeshBasicMaterial({ color: team.primary, transparent: true, opacity: i === 0 ? 0.34 : 0.16 }),
       );
       box.rotation.x = -Math.PI / 2;
       box.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
       box.position.copy(center).addScaledVector(pitN, 0).setY(0.06);
       scene.add(box);
+      const outlineMat = new THREE.MeshBasicMaterial({ color: i === 0 ? 0xfacc15 : 0xffffff, transparent: true, opacity: i === 0 ? 0.95 : 0.45 });
+      for (const [ox, oz, sx, sz] of [[0, -3, 8.2, 0.16], [0, 3, 8.2, 0.16], [-4.1, 0, 0.16, 6], [4.1, 0, 0.16, 6]] as const) {
+        const line = new THREE.Mesh(new THREE.PlaneGeometry(sx, sz), outlineMat.clone());
+        line.rotation.x = -Math.PI / 2;
+        line.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+        line.position.copy(center).addScaledVector(pitForward, ox).addScaledVector(pitN, oz).setY(0.082);
+        scene.add(line);
+      }
+      if (i === 0) {
+        const trigger = new THREE.Mesh(
+          new THREE.PlaneGeometry(6.8, 4.4),
+          new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.26 }),
+        );
+        trigger.rotation.x = -Math.PI / 2;
+        trigger.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+        trigger.position.copy(center).setY(0.095);
+        scene.add(trigger);
+      }
+      const labelCv = document.createElement("canvas");
+      labelCv.width = 256; labelCv.height = 64;
+      const bctx = labelCv.getContext("2d")!;
+      bctx.fillStyle = "rgba(0,0,0,0.74)"; bctx.fillRect(0, 0, 256, 64);
+      bctx.fillStyle = `#${team.primary.toString(16).padStart(6, "0")}`; bctx.fillRect(0, 0, 256, 8);
+      bctx.fillStyle = i === 0 ? "#facc15" : "#ffffff";
+      bctx.font = "bold 22px sans-serif"; bctx.textAlign = "center"; bctx.textBaseline = "middle";
+      bctx.fillText(i === 0 ? "YOUR BOX" : team.team.slice(0, 16).toUpperCase(), 128, 34);
+      const marker = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 1.55), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(labelCv), transparent: true }));
+      marker.position.copy(center).addScaledVector(pitN, 3.55).setY(0.1);
+      marker.rotation.x = -Math.PI / 2;
+      marker.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+      scene.add(marker);
       // Garage wall behind box
       const wall = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 1.2), garageMat);
       wall.position.copy(center).addScaledVector(pitN, 4.2).setY(2);
@@ -904,6 +956,16 @@ export default function RacingGame() {
       lite.position.copy(center).addScaledVector(pitN, 3.7).setY(3.4);
       lite.lookAt(center.x, 3.4, center.z);
       scene.add(lite);
+      for (const side of [-1, 1]) {
+        const ready = new THREE.Group();
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.58, 0.24), new THREE.MeshStandardMaterial({ color: team.primary, roughness: 0.55, emissive: team.primary, emissiveIntensity: i === 0 ? 0.08 : 0.03 }));
+        torso.position.y = 0.58; ready.add(torso);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.34 }));
+        head.position.y = 1.02; ready.add(head);
+        ready.position.copy(center).addScaledVector(pitForward, side * 2.45).addScaledVector(pitN, 2.55).setY(0);
+        ready.lookAt(center.x, 0.7, center.z);
+        scene.add(ready);
+      }
     }
     // Player's box = middle one
     const pitBoxPos = pitBoxPositions[1].clone();
@@ -2162,11 +2224,39 @@ export default function RacingGame() {
 
     // ---------- Pit-stop session state ----------
     const requiredStops = isQualifying ? 0 : (lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0);
-    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0); setPitTimeLeft(0); setPitStatus("Clean stop"); setTyreWearHud(0);
+    setPitStops(0); setPitRequested(false); setPitActive(false); setPitProgress(0); setPitTimeLeft(0); setPitStatus("Clean stop"); setTyreWearHud(0); setPitIndicator("Pit lane open");
     pitStopsRef.current = 0; pitRequestedRef.current = false; pitActiveRef.current = false;
     let pitBoxStart = 0; // ms when current pit stop began
     let pitDurationMs = 5000;
     let pitIssue: "clean" | "slow-gun" | "stuck-tyre" | "unsafe-delay" = "clean";
+    let pitStopArmed = true;
+    let pitEntryAnnounced = false;
+    let previousPitLocal = pitBoxLocal(carPos);
+    const pitServicePos = pitBoxPos.clone();
+
+    function beginPitService() {
+      if (pitActiveRef.current || !pitStopArmed) return;
+      pitStopArmed = false;
+      const roll = Math.random();
+      pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
+      pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
+        pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
+      );
+      setPitStatus(
+        pitIssue === "slow-gun" ? "Wheel gun delay" :
+        pitIssue === "stuck-tyre" ? "Stuck tyre" :
+        pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
+      );
+      pitActiveRef.current = true;
+      setPitActive(true);
+      pitServicePos.copy(carPos);
+      pitCrewGroup.position.copy(pitServicePos);
+      pitCrewGroup.rotation.y = pitBoxHeading;
+      pitBoxStart = performance.now();
+      setPitProgress(0);
+      setPitTimeLeft(pitDurationMs / 1000);
+      setPitIndicator("Service started");
+    }
 
     function closestT(pos: THREE.Vector3) {
       let best = 0, bestD = Infinity;
@@ -2184,6 +2274,18 @@ export default function RacingGame() {
       const along = dx * pitForward.x + dz * pitForward.z;
       const side = dx * pitN.x + dz * pitN.z;
       return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
+    }
+    function pitBoxLocal(pos: THREE.Vector3) {
+      const dx = pos.x - pitBoxPos.x;
+      const dz = pos.z - pitBoxPos.z;
+      return {
+        along: dx * pitForward.x + dz * pitForward.z,
+        side: dx * pitN.x + dz * pitN.z,
+      };
+    }
+    function isInsidePitServiceZone(pos: THREE.Vector3) {
+      const local = pitBoxLocal(pos);
+      return Math.abs(local.along) <= 4.2 && Math.abs(local.side) <= 2.85;
     }
     function distToSegSq(px: number, pz: number, ax: number, az: number, bx: number, bz: number) {
       const dx = bx - ax, dz = bz - az;
@@ -2393,9 +2495,9 @@ export default function RacingGame() {
         // reads correctly.
         pitCrewGroup.visible = prog > 0.05 && prog < 0.95;
         {
-          // Hold the car at the box the player drove into.
-          carPos.x = pitBoxPos.x;
-          carPos.z = pitBoxPos.z;
+          // Hold the car inside the service zone the player actually crossed.
+          carPos.x = pitServicePos.x;
+          carPos.z = pitServicePos.z;
           let dh = pitBoxHeading - heading;
           while (dh > Math.PI) dh -= Math.PI * 2;
           while (dh < -Math.PI) dh += Math.PI * 2;
@@ -2438,6 +2540,7 @@ export default function RacingGame() {
           setPitTimeLeft(0);
           setPitRequested(false);
           pitRequestedRef.current = false;
+          setPitIndicator("Service complete — pit exit clear");
           // Hand control back to the player at the box — they drive out
           // of the pit lane manually. No teleport to exit / rejoin point.
           speed = 0;
@@ -2453,39 +2556,40 @@ export default function RacingGame() {
         }
       }
 
-      // ---------- Pit-box proximity trigger (no teleport) ----------
-      // Player has requested a pit, is driving in the pit lane, and has
-      // parked near the box at low speed → begin the service timer right
-      // where they stopped. The car is held in place during the service
-      // and released afterwards to drive out manually.
-      if (
-        !isQualifying &&
-        !raceFinished &&
-        pitRequestedRef.current &&
-        !pitActiveRef.current &&
-        isInPitLane(carPos)
-      ) {
-        const dxBox = carPos.x - pitBoxPos.x;
-        const dzBox = carPos.z - pitBoxPos.z;
-        const distBoxSq = dxBox * dxBox + dzBox * dzBox;
-        if (distBoxSq < 4 * 4 && Math.abs(speed) < 6) {
-          const roll = Math.random();
-          pitIssue = roll < 0.62 ? "clean" : roll < 0.8 ? "slow-gun" : roll < 0.93 ? "stuck-tyre" : "unsafe-delay";
-          pitDurationMs = 4300 + Math.round(tireWear * 1200) + (
-            pitIssue === "slow-gun" ? 1800 : pitIssue === "stuck-tyre" ? 3200 : pitIssue === "unsafe-delay" ? 4500 : 0
-          );
-          setPitStatus(
-            pitIssue === "slow-gun" ? "Wheel gun delay" :
-            pitIssue === "stuck-tyre" ? "Stuck tyre" :
-            pitIssue === "unsafe-delay" ? "Held for traffic" : "Clean stop"
-          );
-          pitActiveRef.current = true;
-          setPitActive(true);
-          pitBoxStart = now;
-          setPitProgress(0);
-          setPitTimeLeft(pitDurationMs / 1000);
+      // ---------- Pit-box trigger zone (no teleport, no pixel-perfect stop) ----------
+      const currentPitLocal = pitBoxLocal(carPos);
+      const playerInPitLane = isInPitLane(carPos);
+      const availablePitStops = Math.max(requiredStops, 3);
+      if (!playerInPitLane && !pitActiveRef.current) {
+        pitStopArmed = true;
+        pitEntryAnnounced = false;
+        previousPitLocal = currentPitLocal;
+      }
+      if (!isQualifying && !raceFinished && !pitActiveRef.current && playerInPitLane) {
+        if (!pitEntryAnnounced) {
+          pitEntryAnnounced = true;
+          setPitIndicator("Pit lane — aim for your highlighted box");
+        }
+        const inServiceZone = isInsidePitServiceZone(carPos);
+        const crossedCenter = Math.abs(currentPitLocal.side) <= 3.35
+          && Math.abs(previousPitLocal.side) <= 4.25
+          && previousPitLocal.along <= -0.35
+          && currentPitLocal.along >= -0.35;
+        const crossedTriggerBand = Math.abs(currentPitLocal.side) <= 3.35
+          && previousPitLocal.along < -4.2
+          && currentPitLocal.along > 4.2;
+        const stoppedInBox = Math.abs(speed) < 8 && Math.abs(currentPitLocal.along) <= 5.2 && Math.abs(currentPitLocal.side) <= 3.35;
+        const safePitSpeed = Math.abs(speed) < 34;
+        if (
+          pitStopArmed &&
+          pitStopsRef.current < availablePitStops &&
+          (pitRequestedRef.current || requiredStops > pitStopsRef.current || inServiceZone) &&
+          ((safePitSpeed && inServiceZone) || crossedCenter || crossedTriggerBand || stoppedInBox)
+        ) {
+          beginPitService();
         }
       }
+      previousPitLocal = currentPitLocal;
 
       const keySteer = (leftKey ? 1 : 0) - (rightKey ? 1 : 0);
       const steerInput = keySteer !== 0 ? keySteer : -t.steer;
@@ -3484,6 +3588,7 @@ export default function RacingGame() {
                     <div className="text-[9px] text-yellow-300 mt-1 uppercase tracking-widest">Box this lap</div>
                   )}
                   </>}
+                  <div className="mt-1 text-[9px] uppercase tracking-widest text-cyan-200 max-w-28 leading-tight">{pitIndicator}</div>
                 </>
               );
             })()}
@@ -3497,7 +3602,15 @@ export default function RacingGame() {
             return (
               <button
                 type="button"
-                onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); setPitRequested((p) => !p); }}
+                onPointerUp={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setPitRequested((p) => {
+                    const next = !p;
+                    setPitIndicator(next ? "Box confirmed — enter pit lane" : "Pit request cancelled");
+                    return next;
+                  });
+                }}
                 onClick={(e) => { e.stopPropagation(); }}
                 style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
                 className={`absolute top-3 right-3 z-40 min-h-[48px] min-w-[96px] px-5 py-3 font-mono uppercase text-sm font-bold tracking-widest border-2 backdrop-blur transition-all select-none active:scale-95
@@ -3525,10 +3638,11 @@ export default function RacingGame() {
                     style={{ width: `${pitProgress * 100}%` }}
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-2 mt-4 text-[9px] uppercase tracking-widest text-white/60">
+                <div className="grid grid-cols-4 gap-2 mt-4 text-[9px] uppercase tracking-widest text-white/60">
                   <div className={pitProgress > 0.15 ? "text-emerald-300" : ""}>● Jack Up</div>
                   <div className={pitProgress > 0.55 ? "text-emerald-300" : ""}>● New Tires</div>
-                  <div className={pitProgress > 0.9 ? "text-emerald-300" : ""}>● Refuel</div>
+                  <div className={pitProgress > 0.72 ? "text-emerald-300" : ""}>● Repairs</div>
+                  <div className={pitProgress > 0.9 ? "text-emerald-300" : ""}>● Fuel</div>
                 </div>
               </div>
             </div>
