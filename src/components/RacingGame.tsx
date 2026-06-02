@@ -3040,6 +3040,10 @@ export default function RacingGame() {
       exhaustLight.intensity += (exhaustT * 5 - exhaustLight.intensity) * Math.min(1, dt * 8);
       exhaustMat.opacity += (exhaustT * 0.85 - exhaustMat.opacity) * Math.min(1, dt * 8);
       exhaustMesh.scale.setScalar(0.7 + exhaustT * 0.6 + Math.random() * 0.05);
+      // Bonus aura pulse
+      const bonusOn = now < bonusUntil ? 1 : 0;
+      const targetAura = bonusOn * (3.2 + Math.sin(now * 0.012) * 0.9);
+      bonusAura.intensity += (targetAura - bonusAura.intensity) * Math.min(1, dt * 6);
 
       // Tire smoke when drifting / handbraking at speed
       const drifting =
