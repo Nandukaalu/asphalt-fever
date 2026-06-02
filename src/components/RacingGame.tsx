@@ -913,11 +913,11 @@ export default function RacingGame() {
     arrowShape.lineTo(-1.05, -0.25);
     arrowShape.lineTo(0, 1.15);
     const arrowGeo = new THREE.ShapeGeometry(arrowShape);
-    for (const along of [-34, -20, -6, 8, 22, 36]) {
+    for (const along of [-44, -28, -14, 0, 14, 28, 44]) {
       const arrow = new THREE.Mesh(arrowGeo, arrowMat.clone());
       arrow.rotation.x = -Math.PI / 2;
       arrow.rotation.z = -pitHeading;
-      arrow.position.copy(pitCenter).addScaledVector(pitForward, along).addScaledVector(pitN, -0.8).setY(0.083);
+      arrow.position.copy(pitCenter).addScaledVector(pitForward, along).addScaledVector(pitN, -1.6).setY(0.083);
       scene.add(arrow);
     }
     // Three pit boxes with team markings, a highlighted service trigger zone,
@@ -996,8 +996,8 @@ export default function RacingGame() {
     // Player's box = middle one
     const pitBoxPos = pitBoxPositions[1].clone();
     const pitBoxHeading = pitHeading;
-    const pitEntryPos = pitCenter.clone().addScaledVector(pitForward, -48);
-    const pitExitPos = pitCenter.clone().addScaledVector(pitForward, 48);
+    const pitEntryPos = pitCenter.clone().addScaledVector(pitForward, -54);
+    const pitExitPos = pitCenter.clone().addScaledVector(pitForward, 54);
     const trackRejoinPos = curve.getPointAt(0.06);
 
     // ===== Pit slip roads (entry branch + exit merge) =====
@@ -1010,7 +1010,7 @@ export default function RacingGame() {
       const dz = toPit.z - fromOnTrack.z;
       const len = Math.hypot(dx, dz);
       const ang = Math.atan2(dz, dx);
-      const slip = new THREE.Mesh(new THREE.PlaneGeometry(len, 5.2), slipMat);
+      const slip = new THREE.Mesh(new THREE.PlaneGeometry(len, 9.5), slipMat);
       slip.rotation.x = -Math.PI / 2;
       slip.rotation.z = -ang;
       slip.position.set((fromOnTrack.x + toPit.x) / 2, 0.035, (fromOnTrack.z + toPit.z) / 2);
@@ -1038,12 +1038,12 @@ export default function RacingGame() {
     buildSlip(pitExitPos, exitTrackPt);
 
     // Pit-wall (between pit lane and racing surface) — keeps cars in lane.
-    // Shortened to 60m so the entry/exit slip roads have a clear opening at
-    // both ends of the pit lane (no obstruction blocking the merge).
-    const PIT_WALL_LEN = 60;
+    // Shortened so the entry/exit slip roads have a clear opening at both
+    // ends of the pit lane (no obstruction blocking the merge).
+    const PIT_WALL_LEN = 70;
     const pitWallMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.7, metalness: 0.1, emissive: 0x111827, emissiveIntensity: 0.15 });
     const pitWall = new THREE.Mesh(new THREE.BoxGeometry(PIT_WALL_LEN, 0.9, 0.5), pitWallMat);
-    pitWall.position.copy(pitCenter).addScaledVector(pitN, -3.4).setY(0.45);
+    pitWall.position.copy(pitCenter).addScaledVector(pitN, -(PIT_LANE_WIDTH / 2 + 0.4)).setY(0.45);
     pitWall.rotation.y = pitHeading;
     pitWall.castShadow = true; pitWall.receiveShadow = true;
     scene.add(pitWall);
