@@ -378,6 +378,8 @@ export default function RacingGame() {
   const [pitStatus, setPitStatus] = useState("Clean stop");
   const [tyreWearHud, setTyreWearHud] = useState(0);
   const [pitIndicator, setPitIndicator] = useState("Pit lane open");
+  // Hidden bonus mode (activated via the garage easter egg: zoom 1.4x + Open Doors).
+  const [bonusRemainingMs, setBonusRemainingMs] = useState(0);
   const pitRequestedRef = useRef(false);
   const pitActiveRef = useRef(false);
   const pitStopsRef = useRef(0);
@@ -851,11 +853,16 @@ export default function RacingGame() {
     // ===== Pit lane + pit boxes (parallel strip on +n side of start/finish) =====
     const pitN = new THREE.Vector3(-sfTan.z, 0, sfTan.x); // outward normal at start
     const pitForward = new THREE.Vector3(sfTan.x, 0, sfTan.z); // along racing direction
-    const pitOffset = TRACK_WIDTH / 2 + 7;
+    // Pit lane sits ~10m from the racing centerline (wide enough that small
+    // mistakes don't shove the player into a wall). Inner edge of the lane is
+    // ~4.5m from the racing line, leaving room for the pit wall + kerb.
+    const pitOffset = TRACK_WIDTH / 2 + 10;
     const pitCenter = curve.getPointAt(0).clone().addScaledVector(pitN, pitOffset);
     const pitHeading = Math.atan2(sfTan.x, sfTan.z); // matches startHeading convention
-    // Pit lane asphalt strip
-    const pitStripGeo = new THREE.PlaneGeometry(104, 6);
+    // Pit lane asphalt strip — significantly wider than before so the player
+    // has real road to drive on (~half the main track width).
+    const PIT_LANE_WIDTH = 11;
+    const pitStripGeo = new THREE.PlaneGeometry(118, PIT_LANE_WIDTH);
     const pitStrip = new THREE.Mesh(
       pitStripGeo,
       new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.85, metalness: 0.05 }),
@@ -865,16 +872,37 @@ export default function RacingGame() {
     pitStrip.position.copy(pitCenter).setY(0.04);
     pitStrip.receiveShadow = true;
     scene.add(pitStrip);
+    // Tarmac runoff stripe on the inside (between pit lane and track wall)
+    const pitRunoff = new THREE.Mesh(
+      new THREE.PlaneGeometry(118, 3.4),
+      new THREE.MeshStandardMaterial({ color: 0x2a1a1a, roughness: 0.95, metalness: 0.02 }),
+    );
+    pitRunoff.rotation.x = -Math.PI / 2;
+    pitRunoff.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+    pitRunoff.position.copy(pitCenter).addScaledVector(pitN, -(PIT_LANE_WIDTH / 2 + 1.7)).setY(0.032);
+    pitRunoff.receiveShadow = true;
+    scene.add(pitRunoff);
     // White lane edge stripes
     for (const side of [-1, 1]) {
       const stripe = new THREE.Mesh(
-        new THREE.PlaneGeometry(104, 0.18),
+        new THREE.PlaneGeometry(118, 0.2),
         new THREE.MeshBasicMaterial({ color: 0xffffff }),
       );
       stripe.rotation.x = -Math.PI / 2;
       stripe.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
-      stripe.position.copy(pitCenter).addScaledVector(pitN, side * 3).setY(0.05);
+      stripe.position.copy(pitCenter).addScaledVector(pitN, side * (PIT_LANE_WIDTH / 2 - 0.15)).setY(0.05);
       scene.add(stripe);
+    }
+    // Red/white kerb on the outer pit wall side
+    for (let k = 0; k < 24; k++) {
+      const seg = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.8, 0.55),
+        new THREE.MeshBasicMaterial({ color: k % 2 === 0 ? 0xd92d2d : 0xf5f5f5 }),
+      );
+      seg.rotation.x = -Math.PI / 2;
+      seg.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+      seg.position.copy(pitCenter).addScaledVector(pitForward, -56 + k * 4.9).addScaledVector(pitN, PIT_LANE_WIDTH / 2 + 0.4).setY(0.045);
+      scene.add(seg);
     }
     const arrowMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.78 });
     const arrowShape = new THREE.Shape();
@@ -887,11 +915,11 @@ export default function RacingGame() {
     arrowShape.lineTo(-1.05, -0.25);
     arrowShape.lineTo(0, 1.15);
     const arrowGeo = new THREE.ShapeGeometry(arrowShape);
-    for (const along of [-34, -20, -6, 8, 22, 36]) {
+    for (const along of [-44, -28, -14, 0, 14, 28, 44]) {
       const arrow = new THREE.Mesh(arrowGeo, arrowMat.clone());
       arrow.rotation.x = -Math.PI / 2;
       arrow.rotation.z = -pitHeading;
-      arrow.position.copy(pitCenter).addScaledVector(pitForward, along).addScaledVector(pitN, -0.8).setY(0.083);
+      arrow.position.copy(pitCenter).addScaledVector(pitForward, along).addScaledVector(pitN, -1.6).setY(0.083);
       scene.add(arrow);
     }
     // Three pit boxes with team markings, a highlighted service trigger zone,
@@ -970,8 +998,8 @@ export default function RacingGame() {
     // Player's box = middle one
     const pitBoxPos = pitBoxPositions[1].clone();
     const pitBoxHeading = pitHeading;
-    const pitEntryPos = pitCenter.clone().addScaledVector(pitForward, -48);
-    const pitExitPos = pitCenter.clone().addScaledVector(pitForward, 48);
+    const pitEntryPos = pitCenter.clone().addScaledVector(pitForward, -54);
+    const pitExitPos = pitCenter.clone().addScaledVector(pitForward, 54);
     const trackRejoinPos = curve.getPointAt(0.06);
 
     // ===== Pit slip roads (entry branch + exit merge) =====
@@ -984,7 +1012,7 @@ export default function RacingGame() {
       const dz = toPit.z - fromOnTrack.z;
       const len = Math.hypot(dx, dz);
       const ang = Math.atan2(dz, dx);
-      const slip = new THREE.Mesh(new THREE.PlaneGeometry(len, 5.2), slipMat);
+      const slip = new THREE.Mesh(new THREE.PlaneGeometry(len, 9.5), slipMat);
       slip.rotation.x = -Math.PI / 2;
       slip.rotation.z = -ang;
       slip.position.set((fromOnTrack.x + toPit.x) / 2, 0.035, (fromOnTrack.z + toPit.z) / 2);
@@ -1012,12 +1040,12 @@ export default function RacingGame() {
     buildSlip(pitExitPos, exitTrackPt);
 
     // Pit-wall (between pit lane and racing surface) — keeps cars in lane.
-    // Shortened to 60m so the entry/exit slip roads have a clear opening at
-    // both ends of the pit lane (no obstruction blocking the merge).
-    const PIT_WALL_LEN = 60;
+    // Shortened so the entry/exit slip roads have a clear opening at both
+    // ends of the pit lane (no obstruction blocking the merge).
+    const PIT_WALL_LEN = 70;
     const pitWallMat = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, roughness: 0.7, metalness: 0.1, emissive: 0x111827, emissiveIntensity: 0.15 });
     const pitWall = new THREE.Mesh(new THREE.BoxGeometry(PIT_WALL_LEN, 0.9, 0.5), pitWallMat);
-    pitWall.position.copy(pitCenter).addScaledVector(pitN, -3.4).setY(0.45);
+    pitWall.position.copy(pitCenter).addScaledVector(pitN, -(PIT_LANE_WIDTH / 2 + 0.4)).setY(0.45);
     pitWall.rotation.y = pitHeading;
     pitWall.castShadow = true; pitWall.receiveShadow = true;
     scene.add(pitWall);
@@ -1834,27 +1862,30 @@ export default function RacingGame() {
       // Physical paint with clearcoat for realistic metallic reflection
       const primary = new THREE.MeshPhysicalMaterial({
         color: d.primary,
-        roughness: 0.32,
-        metalness: 0.55,
-        clearcoat: 0.9,
-        clearcoatRoughness: 0.1,
-        envMapIntensity: 0.7,
+        roughness: 0.22,
+        metalness: 0.65,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.05,
+        envMapIntensity: 1.05,
+        reflectivity: 0.6,
       });
       const accent = new THREE.MeshPhysicalMaterial({
         color: d.secondary,
-        roughness: 0.38,
-        metalness: 0.5,
-        clearcoat: 0.7,
-        clearcoatRoughness: 0.15,
-        envMapIntensity: 0.65,
+        roughness: 0.26,
+        metalness: 0.6,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.08,
+        envMapIntensity: 0.95,
       });
       // Carbon fiber — dark, slightly metallic, low roughness
       const carbon = new THREE.MeshPhysicalMaterial({
         color: 0x0a0a0c,
-        roughness: 0.42,
-        metalness: 0.6,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.25,
+        roughness: 0.32,
+        metalness: 0.7,
+        clearcoat: 0.75,
+        clearcoatRoughness: 0.18,
+        sheen: 0.4,
+        sheenColor: new THREE.Color(0x223046),
       });
       const black = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.7, metalness: 0.3 });
       const tyre = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.92, metalness: 0.05 });
@@ -2025,6 +2056,11 @@ export default function RacingGame() {
     const exhaustMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), exhaustMat);
     exhaustMesh.position.set(0, 0.42, -1.85);
     player.group.add(exhaustMesh);
+
+    // ----- Bonus aura (golden glow under the car while Overdrive is active) -----
+    const bonusAura = new THREE.PointLight(0xfacc15, 0, 9, 2);
+    bonusAura.position.set(0, 0.2, 0);
+    player.group.add(bonusAura);
 
     // ----- Rain particles -----
     let rainPoints: THREE.Points | null = null;
@@ -2273,7 +2309,10 @@ export default function RacingGame() {
       const dz = pos.z - pitCenter.z;
       const along = dx * pitForward.x + dz * pitForward.z;
       const side = dx * pitN.x + dz * pitN.z;
-      return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
+      // Lane width is PIT_LANE_WIDTH (=11), plus a small runoff strip on the
+      // inner side and a kerb on the outer side — both treated as driveable
+      // so brushing an edge does not snap the car back into a wall.
+      return Math.abs(along) <= 60 && side >= -(PIT_LANE_WIDTH / 2 + 3) && side <= (PIT_LANE_WIDTH / 2 + 1.2);
     }
     function pitBoxLocal(pos: THREE.Vector3) {
       const dx = pos.x - pitBoxPos.x;
@@ -2285,7 +2324,7 @@ export default function RacingGame() {
     }
     function isInsidePitServiceZone(pos: THREE.Vector3) {
       const local = pitBoxLocal(pos);
-      return Math.abs(local.along) <= 4.2 && Math.abs(local.side) <= 2.85;
+      return Math.abs(local.along) <= 4.6 && Math.abs(local.side) <= 3.4;
     }
     function distToSegSq(px: number, pz: number, ax: number, az: number, bx: number, bz: number) {
       const dx = bx - ax, dz = bz - az;
@@ -2301,7 +2340,7 @@ export default function RacingGame() {
     // pit-corridor — no off-track drag and no wall collision applies.
     function isInPitCorridor(pos: THREE.Vector3) {
       if (isInPitLane(pos)) return true;
-      const SLIP_HALF_SQ = 3.2 * 3.2;
+      const SLIP_HALF_SQ = 5.0 * 5.0;
       if (distToSegSq(pos.x, pos.z, pitSlipEntryA.x, pitSlipEntryA.z, pitSlipEntryB.x, pitSlipEntryB.z) <= SLIP_HALF_SQ) return true;
       if (distToSegSq(pos.x, pos.z, pitSlipExitA.x, pitSlipExitA.z, pitSlipExitB.x, pitSlipExitB.z) <= SLIP_HALF_SQ) return true;
       return false;
@@ -2346,9 +2385,30 @@ export default function RacingGame() {
     const DRAG = 0.7;
     const OFF_TRACK_DRAG = Math.max(4, 8 - tune.suspension * 0.35); // suspension → less penalty off-track
     const STEER_RATE = (2.7 + tune.handling * 0.09) * tireGrip * perf.handling; // + team handling
-    const WALL_LIMIT = TRACK_WIDTH / 2 + 2.3;
+    // Give the player real runoff (~6m of gravel/tarmac) before the wall
+    // snaps them back. Small mistakes drag and lose speed (handled below via
+    // OFF_TRACK_DRAG) but no longer instantly reset the car.
+    const WALL_LIMIT = TRACK_WIDTH / 2 + 6.5;
+
 
     let last = performance.now();
+
+    // ---- Hidden performance bonus (garage easter egg) ----
+    // 90s window of +18% top speed / accel and +12% grip, plus a glow VFX.
+    let bonusUntil = 0;
+    try {
+      const raw = localStorage.getItem("af-bonus-active");
+      if (raw) {
+        const o = JSON.parse(raw) as { activatedAt: number; durationMs: number };
+        const dur = Math.min(120_000, Math.max(0, Number(o.durationMs) || 0));
+        const ends = Number(o.activatedAt || 0) + dur;
+        if (Date.now() < ends) {
+          // Anchor to the race start so the buff isn't wasted on menu time.
+          bonusUntil = last + Math.min(dur, ends - Date.now());
+        }
+        localStorage.removeItem("af-bonus-active");
+      }
+    } catch {}
     let raf = 0;
     let hudTick = 0;
     let advancingFromQualifying = false;
@@ -2613,12 +2673,15 @@ export default function RacingGame() {
       tireTemp += ((accel ? 0.2 : 0) + speedFrac * 0.45 + Math.abs(steering) * 0.15 - tireTemp) * Math.min(1, dt * 0.35);
       const wearGrip = Math.max(0.48, 1 - tireWear * 0.46);
       const weatherGrip = Math.max(0.55, 1 - wetness * 0.2 + wetGripBonus - hydro * 0.35);
-      const gripNow = wearGrip * weatherGrip;
-      if (accel) speed += ACCEL * (0.82 + gripNow * 0.18) * dt;
+      const bonusActive = now < bonusUntil;
+      const bonusGrip = bonusActive ? 1.12 : 1;
+      const bonusBoost = bonusActive ? 1.18 : 1;
+      const gripNow = wearGrip * weatherGrip * bonusGrip;
+      if (accel) speed += ACCEL * bonusBoost * (0.82 + gripNow * 0.18) * dt;
       if (brake) speed -= BRAKE * (0.65 + gripNow * 0.35) * dt;
       if (!accel && !brake) speed -= Math.sign(speed) * Math.min(Math.abs(speed), DRAG * dt * 6);
       if (handbrake) speed *= Math.pow(0.05, dt);
-      speed = Math.max(-15, Math.min(MAX_SPEED * (0.82 + wearGrip * 0.18), speed));
+      speed = Math.max(-15, Math.min(MAX_SPEED * bonusBoost * (0.82 + wearGrip * 0.18), speed));
 
       const ct = closestT(carPos);
       const inPitLaneNow = isInPitCorridor(carPos);
@@ -2980,6 +3043,10 @@ export default function RacingGame() {
       exhaustLight.intensity += (exhaustT * 5 - exhaustLight.intensity) * Math.min(1, dt * 8);
       exhaustMat.opacity += (exhaustT * 0.85 - exhaustMat.opacity) * Math.min(1, dt * 8);
       exhaustMesh.scale.setScalar(0.7 + exhaustT * 0.6 + Math.random() * 0.05);
+      // Bonus aura pulse
+      const bonusOn = now < bonusUntil ? 1 : 0;
+      const targetAura = bonusOn * (3.2 + Math.sin(now * 0.012) * 0.9);
+      bonusAura.intensity += (targetAura - bonusAura.intensity) * Math.min(1, dt * 6);
 
       // Tire smoke when drifting / handbraking at speed
       const drifting =
@@ -3035,6 +3102,7 @@ export default function RacingGame() {
           position,
         });
         setTyreWearHud(tireWear);
+        setBonusRemainingMs(Math.max(0, bonusUntil - now));
 
         // -------- Live timing tower --------
         const toHex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
@@ -3593,6 +3661,15 @@ export default function RacingGame() {
               );
             })()}
           </div>
+
+          {/* Hidden bonus indicator */}
+          {bonusRemainingMs > 0 && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+              <div className="px-4 py-1.5 rounded-full bg-yellow-300/95 text-black font-display text-[11px] uppercase tracking-[0.25em] shadow-[0_0_25px_rgba(250,204,21,0.7)] animate-pulse">
+                ⚡ Overdrive · {Math.ceil(bonusRemainingMs / 1000)}s
+              </div>
+            </div>
+          )}
 
           {/* PIT button — race only */}
           {sessionMode === "race" && !pitActive && (() => {

@@ -276,19 +276,29 @@ function GaragePage() {
     setPhotoFlash(true);
     setTimeout(() => setPhotoFlash(false), 350);
     audio.click();
-    // iPad easter egg: enable infinite credits for one race only
+    // (The old "photo grants credits" exploit was removed — taking a photo
+    // now just plays the flash. The hidden performance bonus lives behind a
+    // different gesture: see tryActivateBonus().)
+  }
+
+  const [bonusFlash, setBonusFlash] = useState<string | null>(null);
+  function tryActivateBonus() {
+    // Secret performance easter egg:
+    //   1. Zoom to exactly 1.4×.
+    //   2. Press "Open Doors".
+    // Activates a temporary, race-bounded boost (handled in RacingGame).
+    const z = Math.round(zoom * 100) / 100;
+    if (Math.abs(z - 1.4) > 0.005) return false;
     try {
-      const ua = navigator.userAgent || "";
-      const isIpad = /iPad/i.test(ua) || (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1);
-      if (isIpad && !infiniteRef.current) {
-        localStorage.setItem("af-tuning-pre-infinite", JSON.stringify(tuning));
-        localStorage.setItem("af-wallet-pre-infinite", JSON.stringify(wallet));
-        localStorage.setItem("af-infinite-credits", "true");
-        localStorage.setItem("af-infinite-oneshot", "true");
-        infiniteRef.current = true;
-        setInfiniteMode(true);
-      }
+      localStorage.setItem(
+        "af-bonus-active",
+        JSON.stringify({ activatedAt: Date.now(), durationMs: 90_000 }),
+      );
     } catch {}
+    setBonusFlash("⚡ HIDDEN BONUS UNLOCKED — speed & grip boost active for your next race");
+    setTimeout(() => setBonusFlash(null), 4200);
+    audio.click();
+    return true;
   }
 
   // drag rotate
@@ -356,6 +366,13 @@ function GaragePage() {
 
             {/* Photo flash */}
             {photoFlash && <div className="absolute inset-0 bg-white animate-[fade-out_0.35s_ease-out] pointer-events-none" />}
+            {bonusFlash && (
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+                <div className="px-5 py-3 rounded-2xl bg-yellow-300/95 text-black font-display text-sm uppercase tracking-[0.2em] shadow-[0_0_40px_rgba(250,204,21,0.85)] animate-in zoom-in-50 fade-in duration-300">
+                  {bonusFlash}
+                </div>
+              </div>
+            )}
 
             {/* Top stats overlay */}
             <div className="absolute top-3 left-3 right-3 flex items-start justify-between pointer-events-none">
@@ -373,7 +390,7 @@ function GaragePage() {
             <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2 justify-center">
               <StageBtn label="Rev" icon="🏁" onClick={() => { audio.revEngine(0.8 + tuning.engine * 0.1); }} />
               <StageBtn label={headlights ? "Lights On" : "Lights"} icon="💡" active={headlights} onClick={() => setHeadlights(v => !v)} />
-              <StageBtn label={doorsOpen ? "Close Doors" : "Open Doors"} icon="🚪" active={doorsOpen} onClick={() => setDoorsOpen(v => !v)} />
+              <StageBtn label={doorsOpen ? "Close Doors" : "Open Doors"} icon="🚪" active={doorsOpen} onClick={() => { const bonus = tryActivateBonus(); setDoorsOpen(v => !v); if (bonus) audio.revEngine(1.2); }} />
               <StageBtn label="Neon" icon="✨" active={neonOn} onClick={() => setNeonOn(v => !v)} />
               <StageBtn label="Rotate" icon="↻" onClick={() => setAngle(a => a + 45)} />
               <StageBtn label={`Zoom ${zoom.toFixed(1)}x`} icon="🔍" onClick={() => setZoom(z => z >= 1.6 ? 0.9 : +(z + 0.15).toFixed(2))} />
