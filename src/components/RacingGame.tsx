@@ -851,11 +851,16 @@ export default function RacingGame() {
     // ===== Pit lane + pit boxes (parallel strip on +n side of start/finish) =====
     const pitN = new THREE.Vector3(-sfTan.z, 0, sfTan.x); // outward normal at start
     const pitForward = new THREE.Vector3(sfTan.x, 0, sfTan.z); // along racing direction
-    const pitOffset = TRACK_WIDTH / 2 + 7;
+    // Pit lane sits ~10m from the racing centerline (wide enough that small
+    // mistakes don't shove the player into a wall). Inner edge of the lane is
+    // ~4.5m from the racing line, leaving room for the pit wall + kerb.
+    const pitOffset = TRACK_WIDTH / 2 + 10;
     const pitCenter = curve.getPointAt(0).clone().addScaledVector(pitN, pitOffset);
     const pitHeading = Math.atan2(sfTan.x, sfTan.z); // matches startHeading convention
-    // Pit lane asphalt strip
-    const pitStripGeo = new THREE.PlaneGeometry(104, 6);
+    // Pit lane asphalt strip — significantly wider than before so the player
+    // has real road to drive on (~half the main track width).
+    const PIT_LANE_WIDTH = 11;
+    const pitStripGeo = new THREE.PlaneGeometry(118, PIT_LANE_WIDTH);
     const pitStrip = new THREE.Mesh(
       pitStripGeo,
       new THREE.MeshStandardMaterial({ color: 0x101012, roughness: 0.85, metalness: 0.05 }),
@@ -865,16 +870,37 @@ export default function RacingGame() {
     pitStrip.position.copy(pitCenter).setY(0.04);
     pitStrip.receiveShadow = true;
     scene.add(pitStrip);
+    // Tarmac runoff stripe on the inside (between pit lane and track wall)
+    const pitRunoff = new THREE.Mesh(
+      new THREE.PlaneGeometry(118, 3.4),
+      new THREE.MeshStandardMaterial({ color: 0x2a1a1a, roughness: 0.95, metalness: 0.02 }),
+    );
+    pitRunoff.rotation.x = -Math.PI / 2;
+    pitRunoff.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+    pitRunoff.position.copy(pitCenter).addScaledVector(pitN, -(PIT_LANE_WIDTH / 2 + 1.7)).setY(0.032);
+    pitRunoff.receiveShadow = true;
+    scene.add(pitRunoff);
     // White lane edge stripes
     for (const side of [-1, 1]) {
       const stripe = new THREE.Mesh(
-        new THREE.PlaneGeometry(104, 0.18),
+        new THREE.PlaneGeometry(118, 0.2),
         new THREE.MeshBasicMaterial({ color: 0xffffff }),
       );
       stripe.rotation.x = -Math.PI / 2;
       stripe.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
-      stripe.position.copy(pitCenter).addScaledVector(pitN, side * 3).setY(0.05);
+      stripe.position.copy(pitCenter).addScaledVector(pitN, side * (PIT_LANE_WIDTH / 2 - 0.15)).setY(0.05);
       scene.add(stripe);
+    }
+    // Red/white kerb on the outer pit wall side
+    for (let k = 0; k < 24; k++) {
+      const seg = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.8, 0.55),
+        new THREE.MeshBasicMaterial({ color: k % 2 === 0 ? 0xd92d2d : 0xf5f5f5 }),
+      );
+      seg.rotation.x = -Math.PI / 2;
+      seg.rotation.z = -Math.atan2(sfTan.z, sfTan.x);
+      seg.position.copy(pitCenter).addScaledVector(pitForward, -56 + k * 4.9).addScaledVector(pitN, PIT_LANE_WIDTH / 2 + 0.4).setY(0.045);
+      scene.add(seg);
     }
     const arrowMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.78 });
     const arrowShape = new THREE.Shape();
