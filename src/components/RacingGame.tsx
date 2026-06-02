@@ -2299,7 +2299,10 @@ export default function RacingGame() {
       const dz = pos.z - pitCenter.z;
       const along = dx * pitForward.x + dz * pitForward.z;
       const side = dx * pitN.x + dz * pitN.z;
-      return Math.abs(along) <= 54 && Math.abs(side) <= 4.8;
+      // Lane width is PIT_LANE_WIDTH (=11), plus a small runoff strip on the
+      // inner side and a kerb on the outer side — both treated as driveable
+      // so brushing an edge does not snap the car back into a wall.
+      return Math.abs(along) <= 60 && side >= -(PIT_LANE_WIDTH / 2 + 3) && side <= (PIT_LANE_WIDTH / 2 + 1.2);
     }
     function pitBoxLocal(pos: THREE.Vector3) {
       const dx = pos.x - pitBoxPos.x;
@@ -2311,7 +2314,7 @@ export default function RacingGame() {
     }
     function isInsidePitServiceZone(pos: THREE.Vector3) {
       const local = pitBoxLocal(pos);
-      return Math.abs(local.along) <= 4.2 && Math.abs(local.side) <= 2.85;
+      return Math.abs(local.along) <= 4.6 && Math.abs(local.side) <= 3.4;
     }
     function distToSegSq(px: number, pz: number, ax: number, az: number, bx: number, bz: number) {
       const dx = bx - ax, dz = bz - az;
@@ -2327,7 +2330,7 @@ export default function RacingGame() {
     // pit-corridor — no off-track drag and no wall collision applies.
     function isInPitCorridor(pos: THREE.Vector3) {
       if (isInPitLane(pos)) return true;
-      const SLIP_HALF_SQ = 3.2 * 3.2;
+      const SLIP_HALF_SQ = 5.0 * 5.0;
       if (distToSegSq(pos.x, pos.z, pitSlipEntryA.x, pitSlipEntryA.z, pitSlipEntryB.x, pitSlipEntryB.z) <= SLIP_HALF_SQ) return true;
       if (distToSegSq(pos.x, pos.z, pitSlipExitA.x, pitSlipExitA.z, pitSlipExitB.x, pitSlipExitB.z) <= SLIP_HALF_SQ) return true;
       return false;
