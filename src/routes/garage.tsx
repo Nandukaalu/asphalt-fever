@@ -276,19 +276,29 @@ function GaragePage() {
     setPhotoFlash(true);
     setTimeout(() => setPhotoFlash(false), 350);
     audio.click();
-    // iPad easter egg: enable infinite credits for one race only
+    // (The old "photo grants credits" exploit was removed — taking a photo
+    // now just plays the flash. The hidden performance bonus lives behind a
+    // different gesture: see tryActivateBonus().)
+  }
+
+  const [bonusFlash, setBonusFlash] = useState<string | null>(null);
+  function tryActivateBonus() {
+    // Secret performance easter egg:
+    //   1. Zoom to exactly 1.4×.
+    //   2. Press "Open Doors".
+    // Activates a temporary, race-bounded boost (handled in RacingGame).
+    const z = Math.round(zoom * 100) / 100;
+    if (Math.abs(z - 1.4) > 0.005) return false;
     try {
-      const ua = navigator.userAgent || "";
-      const isIpad = /iPad/i.test(ua) || (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1);
-      if (isIpad && !infiniteRef.current) {
-        localStorage.setItem("af-tuning-pre-infinite", JSON.stringify(tuning));
-        localStorage.setItem("af-wallet-pre-infinite", JSON.stringify(wallet));
-        localStorage.setItem("af-infinite-credits", "true");
-        localStorage.setItem("af-infinite-oneshot", "true");
-        infiniteRef.current = true;
-        setInfiniteMode(true);
-      }
+      localStorage.setItem(
+        "af-bonus-active",
+        JSON.stringify({ activatedAt: Date.now(), durationMs: 90_000 }),
+      );
     } catch {}
+    setBonusFlash("⚡ HIDDEN BONUS UNLOCKED — speed & grip boost active for your next race");
+    setTimeout(() => setBonusFlash(null), 4200);
+    audio.click();
+    return true;
   }
 
   // drag rotate
