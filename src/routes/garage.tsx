@@ -366,6 +366,13 @@ function GaragePage() {
 
             {/* Photo flash */}
             {photoFlash && <div className="absolute inset-0 bg-white animate-[fade-out_0.35s_ease-out] pointer-events-none" />}
+            {bonusFlash && (
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+                <div className="px-5 py-3 rounded-2xl bg-yellow-300/95 text-black font-display text-sm uppercase tracking-[0.2em] shadow-[0_0_40px_rgba(250,204,21,0.85)] animate-in zoom-in-50 fade-in duration-300">
+                  {bonusFlash}
+                </div>
+              </div>
+            )}
 
             {/* Top stats overlay */}
             <div className="absolute top-3 left-3 right-3 flex items-start justify-between pointer-events-none">
