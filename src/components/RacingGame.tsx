@@ -2375,7 +2375,10 @@ export default function RacingGame() {
     const DRAG = 0.7;
     const OFF_TRACK_DRAG = Math.max(4, 8 - tune.suspension * 0.35); // suspension → less penalty off-track
     const STEER_RATE = (2.7 + tune.handling * 0.09) * tireGrip * perf.handling; // + team handling
-    const WALL_LIMIT = TRACK_WIDTH / 2 + 2.3;
+    // Give the player real runoff (~6m of gravel/tarmac) before the wall
+    // snaps them back. Small mistakes drag and lose speed (handled below via
+    // OFF_TRACK_DRAG) but no longer instantly reset the car.
+    const WALL_LIMIT = TRACK_WIDTH / 2 + 6.5;
 
     let last = performance.now();
     let raf = 0;
