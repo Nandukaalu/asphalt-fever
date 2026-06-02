@@ -1862,27 +1862,30 @@ export default function RacingGame() {
       // Physical paint with clearcoat for realistic metallic reflection
       const primary = new THREE.MeshPhysicalMaterial({
         color: d.primary,
-        roughness: 0.32,
-        metalness: 0.55,
-        clearcoat: 0.9,
-        clearcoatRoughness: 0.1,
-        envMapIntensity: 0.7,
+        roughness: 0.22,
+        metalness: 0.65,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.05,
+        envMapIntensity: 1.05,
+        reflectivity: 0.6,
       });
       const accent = new THREE.MeshPhysicalMaterial({
         color: d.secondary,
-        roughness: 0.38,
-        metalness: 0.5,
-        clearcoat: 0.7,
-        clearcoatRoughness: 0.15,
-        envMapIntensity: 0.65,
+        roughness: 0.26,
+        metalness: 0.6,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.08,
+        envMapIntensity: 0.95,
       });
       // Carbon fiber — dark, slightly metallic, low roughness
       const carbon = new THREE.MeshPhysicalMaterial({
         color: 0x0a0a0c,
-        roughness: 0.42,
-        metalness: 0.6,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.25,
+        roughness: 0.32,
+        metalness: 0.7,
+        clearcoat: 0.75,
+        clearcoatRoughness: 0.18,
+        sheen: 0.4,
+        sheenColor: new THREE.Color(0x223046),
       });
       const black = new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 0.7, metalness: 0.3 });
       const tyre = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.92, metalness: 0.05 });
