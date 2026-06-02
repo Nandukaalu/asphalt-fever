@@ -3650,6 +3650,15 @@ export default function RacingGame() {
             })()}
           </div>
 
+          {/* Hidden bonus indicator */}
+          {bonusRemainingMs > 0 && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+              <div className="px-4 py-1.5 rounded-full bg-yellow-300/95 text-black font-display text-[11px] uppercase tracking-[0.25em] shadow-[0_0_25px_rgba(250,204,21,0.7)] animate-pulse">
+                ⚡ Overdrive · {Math.ceil(bonusRemainingMs / 1000)}s
+              </div>
+            </div>
+          )}
+
           {/* PIT button — race only */}
           {sessionMode === "race" && !pitActive && (() => {
             const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
