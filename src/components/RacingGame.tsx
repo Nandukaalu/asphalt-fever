@@ -2382,6 +2382,9 @@ export default function RacingGame() {
     // OFF_TRACK_DRAG) but no longer instantly reset the car.
     const WALL_LIMIT = TRACK_WIDTH / 2 + 6.5;
 
+
+    let last = performance.now();
+
     // ---- Hidden performance bonus (garage easter egg) ----
     // 90s window of +18% top speed / accel and +12% grip, plus a glow VFX.
     let bonusUntil = 0;
@@ -2392,15 +2395,12 @@ export default function RacingGame() {
         const dur = Math.min(120_000, Math.max(0, Number(o.durationMs) || 0));
         const ends = Number(o.activatedAt || 0) + dur;
         if (Date.now() < ends) {
-          // Anchor the window to the race start so the buff isn't wasted on
-          // menu time. Consume the flag immediately — single race only.
+          // Anchor to the race start so the buff isn't wasted on menu time.
           bonusUntil = last + Math.min(dur, ends - Date.now());
         }
         localStorage.removeItem("af-bonus-active");
       }
     } catch {}
-
-    let last = performance.now();
     let raf = 0;
     let hudTick = 0;
     let advancingFromQualifying = false;
