@@ -383,7 +383,7 @@ function GaragePage() {
             <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2 justify-center">
               <StageBtn label="Rev" icon="🏁" onClick={() => { audio.revEngine(0.8 + tuning.engine * 0.1); }} />
               <StageBtn label={headlights ? "Lights On" : "Lights"} icon="💡" active={headlights} onClick={() => setHeadlights(v => !v)} />
-              <StageBtn label={doorsOpen ? "Close Doors" : "Open Doors"} icon="🚪" active={doorsOpen} onClick={() => setDoorsOpen(v => !v)} />
+              <StageBtn label={doorsOpen ? "Close Doors" : "Open Doors"} icon="🚪" active={doorsOpen} onClick={() => { const bonus = tryActivateBonus(); setDoorsOpen(v => !v); if (bonus) audio.revEngine(1.2); }} />
               <StageBtn label="Neon" icon="✨" active={neonOn} onClick={() => setNeonOn(v => !v)} />
               <StageBtn label="Rotate" icon="↻" onClick={() => setAngle(a => a + 45)} />
               <StageBtn label={`Zoom ${zoom.toFixed(1)}x`} icon="🔍" onClick={() => setZoom(z => z >= 1.6 ? 0.9 : +(z + 0.15).toFixed(2))} />
