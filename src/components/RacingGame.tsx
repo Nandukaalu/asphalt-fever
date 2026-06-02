@@ -378,6 +378,8 @@ export default function RacingGame() {
   const [pitStatus, setPitStatus] = useState("Clean stop");
   const [tyreWearHud, setTyreWearHud] = useState(0);
   const [pitIndicator, setPitIndicator] = useState("Pit lane open");
+  // Hidden bonus mode (activated via the garage easter egg: zoom 1.4x + Open Doors).
+  const [bonusRemainingMs, setBonusRemainingMs] = useState(0);
   const pitRequestedRef = useRef(false);
   const pitActiveRef = useRef(false);
   const pitStopsRef = useRef(0);
