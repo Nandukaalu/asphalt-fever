@@ -2665,12 +2665,15 @@ export default function RacingGame() {
       tireTemp += ((accel ? 0.2 : 0) + speedFrac * 0.45 + Math.abs(steering) * 0.15 - tireTemp) * Math.min(1, dt * 0.35);
       const wearGrip = Math.max(0.48, 1 - tireWear * 0.46);
       const weatherGrip = Math.max(0.55, 1 - wetness * 0.2 + wetGripBonus - hydro * 0.35);
-      const gripNow = wearGrip * weatherGrip;
-      if (accel) speed += ACCEL * (0.82 + gripNow * 0.18) * dt;
+      const bonusActive = now < bonusUntil;
+      const bonusGrip = bonusActive ? 1.12 : 1;
+      const bonusBoost = bonusActive ? 1.18 : 1;
+      const gripNow = wearGrip * weatherGrip * bonusGrip;
+      if (accel) speed += ACCEL * bonusBoost * (0.82 + gripNow * 0.18) * dt;
       if (brake) speed -= BRAKE * (0.65 + gripNow * 0.35) * dt;
       if (!accel && !brake) speed -= Math.sign(speed) * Math.min(Math.abs(speed), DRAG * dt * 6);
       if (handbrake) speed *= Math.pow(0.05, dt);
-      speed = Math.max(-15, Math.min(MAX_SPEED * (0.82 + wearGrip * 0.18), speed));
+      speed = Math.max(-15, Math.min(MAX_SPEED * bonusBoost * (0.82 + wearGrip * 0.18), speed));
 
       const ct = closestT(carPos);
       const inPitLaneNow = isInPitCorridor(carPos);
