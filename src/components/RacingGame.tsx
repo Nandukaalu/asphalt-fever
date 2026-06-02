@@ -3090,6 +3090,7 @@ export default function RacingGame() {
           position,
         });
         setTyreWearHud(tireWear);
+        setBonusRemainingMs(Math.max(0, bonusUntil - now));
 
         // -------- Live timing tower --------
         const toHex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
