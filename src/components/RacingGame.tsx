@@ -2054,6 +2054,11 @@ export default function RacingGame() {
     exhaustMesh.position.set(0, 0.42, -1.85);
     player.group.add(exhaustMesh);
 
+    // ----- Bonus aura (golden glow under the car while Overdrive is active) -----
+    const bonusAura = new THREE.PointLight(0xfacc15, 0, 9, 2);
+    bonusAura.position.set(0, 0.2, 0);
+    player.group.add(bonusAura);
+
     // ----- Rain particles -----
     let rainPoints: THREE.Points | null = null;
     let rainPositions: Float32Array | null = null;
