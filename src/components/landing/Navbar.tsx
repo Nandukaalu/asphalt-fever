@@ -1,9 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+
+const ADMIN_EMAIL = "paarth376@gmail.com";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL;
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -51,6 +56,14 @@ export default function Navbar() {
           >
             Free Roam
           </Link>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className="hidden sm:inline-flex tap-target px-4 items-center rounded-full border border-red-500/60 text-red-300 text-xs font-display uppercase tracking-widest hover:bg-red-500/10 transition-all"
+            >
+              Admin
+            </Link>
+          )}
           <Link
             to="/customize"
             className="hidden sm:inline-flex tap-target px-4 items-center rounded-full glass text-xs font-display uppercase tracking-widest hover:shadow-cyan transition-all"
@@ -97,6 +110,14 @@ export default function Navbar() {
             >
               Free Roam
             </Link>
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="tap-target px-3 flex items-center rounded-lg hover:bg-red-500/10 text-red-300 font-display uppercase tracking-widest text-sm"
+              >
+                Admin
+              </Link>
+            )}
             <Link
               to="/customize"
               className="tap-target px-3 flex items-center rounded-lg hover:bg-secondary font-display uppercase tracking-widest text-sm"
