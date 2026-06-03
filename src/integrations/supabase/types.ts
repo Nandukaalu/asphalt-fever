@@ -184,6 +184,27 @@ export type Database = {
         }
         Relationships: []
       }
+      server_announcements: {
+        Row: {
+          author_email: string
+          created_at: string
+          id: string
+          message: string
+        }
+        Insert: {
+          author_email: string
+          created_at?: string
+          id?: string
+          message: string
+        }
+        Update: {
+          author_email?: string
+          created_at?: string
+          id?: string
+          message?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
