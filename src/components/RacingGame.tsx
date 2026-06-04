@@ -2206,6 +2206,7 @@ export default function RacingGame() {
     player.group.rotation.y = startHeading;
 
     // AI cars (other drivers)
+    type AIMode = "cruise" | "attack" | "defend" | "setup";
     type AI = {
       car: ReturnType<typeof buildCar>;
       t: number;
@@ -2215,9 +2216,24 @@ export default function RacingGame() {
       lastLap: number;
       bestLap: number;
       prevT: number;
+      personality: Personality;
+      traits: PersonalityTraits;
+      paceMult: number;          // baseline target pace as fraction of MAX_SPEED_PREVIEW
+      lateralBias: number;       // resting offset from racing line
+      lateralTarget: number;     // current offset target (race-line vs attack/defend)
+      currentOffset: number;     // smoothed lateral offset
+      mode: AIMode;
+      modeUntil: number;
+      attackSince: number;
+      mistakeUntil: number;      // ms: grip reduced until this
+      gripPenalty: number;       // current mistake-induced grip mult (0..1)
+      launchDelay: number;       // ms after start lights
+      damage: number;            // 0..1
+      lastMistakeAnnounce: number;
     };
     const MAX_SPEED_PREVIEW = 78;
-    const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
+    const diffSpec = DIFFICULTIES.find((d) => d.id === difficultyRef.current) ?? DIFFICULTIES[1];
+    const AI_SPEED = MAX_SPEED_PREVIEW * diffSpec.basePace; // fallback / lap-time estimator
     const ais: (AI & { driver: Driver; offset: number; firstCross: boolean })[] = [];
     if (!isMulti) {
       // Order AI by qualifying grid (skip player); fall back to default order.
