@@ -2818,17 +2818,19 @@ export default function RacingGame() {
         // Project back to forward/lateral relative to current heading
         const newForward = ntvx * fxw + ntvz * fzw;
         const newLateral = ntvx * sxw + ntvz * szw;
-        // Head-on impacts bleed extra speed (energy → deformation) — scale with closure speed
-        const headOnBleed = headOn * (0.35 + Math.min(0.45, intoWall / 35));
+        // Head-on impacts bleed a LOT of speed (energy → deformation).
+        // Glancing scrapes lose modest speed and emit a steady spark trail.
+        const headOnBleed = Math.min(0.75, headOn * (0.55 + Math.min(0.55, intoWall / 28)) * 1.1);
         speed = newForward * (1 - headOnBleed);
-        lateralVel = newLateral * 0.6;
+        lateralVel = newLateral * 0.55;
         // Post-impact instability
         const severity = headOn * Math.min(1, intoWall / 25);
         impactControlLoss = Math.min(1, impactControlLoss + severity * 0.85);
         postImpactSpin += (Math.random() - 0.5) * severity * 2.2;
         camTrauma = Math.min(1.5, camTrauma + 0.4 + severity * 0.8);
-        // Sparks (always on contact) — count scales with closure speed
-        const sparkCount = Math.min(10, 2 + Math.floor(intoWall * 0.5));
+        // Sparks (always on contact) — count scales with closure + tangential scrape
+        const tangentialSpeed = Math.sqrt(tvx * tvx + tvz * tvz);
+        const sparkCount = Math.min(12, 2 + Math.floor(intoWall * 0.5) + Math.floor(tangentialSpeed * 0.15));
         for (let s = 0; s < sparkCount; s++) {
           spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
             color: 0xffb648, life: 0.25 + Math.random() * 0.25, scale: 0.35, opacity: 0.95, y: 0.3,
