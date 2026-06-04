@@ -3602,6 +3602,8 @@ export default function RacingGame() {
           career={career}
           mode={mode}
           lapsChoice={lapsChoice}
+          difficulty={difficulty}
+          onPickDifficulty={setDifficulty}
           allTracks={allTracks}
           customTracks={customTracks}
           onCreate={() => setScreen("editor")}
