@@ -2771,8 +2771,9 @@ export default function RacingGame() {
       const turnRate = STEER_RATE * gripNow * speedFactor * steerAuthority * (speed >= 0 ? 1 : -1);
       const dHeading = steering * turnRate * dt;
       heading += dHeading + postImpactSpin * dt;
-      postImpactSpin *= Math.pow(0.05, dt);
-      impactControlLoss *= Math.pow(0.25, dt);
+      // Slower decay → impacts feel weighty, the car actually spins/recovers
+      postImpactSpin *= Math.pow(0.45, dt);
+      impactControlLoss *= Math.pow(0.55, dt);
       const lateralAccel = -dHeading * speed * (0.6 + (1 - gripNow) * 0.45);
       lateralVel += lateralAccel;
       lateralVel *= Math.pow(Math.max(0.04, 0.16 + (1 - gripNow) * 0.55), dt);
