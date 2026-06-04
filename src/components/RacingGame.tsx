@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Link } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import PodiumCeremony, { type PodiumEntry } from "./PodiumCeremony";
+import { toast } from "sonner";
 import {
   readNextRoundSetup,
   clearNextRoundSetup,
@@ -95,6 +96,49 @@ const DRIVERS: Driver[] = [
   { id: "ivory", name: "Lukas Faber", team: "Ivory Tech", primary: 0xf3f4f6, secondary: 0x111111, number: 18 },
   { id: "onyx", name: "Sam Carter", team: "Onyx Racing", primary: 0x0f172a, secondary: 0xfbbf24, number: 55 },
 ];
+
+// ---------------- AI difficulty + personalities ----------------
+export type Difficulty = "easy" | "medium" | "hard" | "expert" | "legendary";
+type DiffSpec = {
+  id: Difficulty; label: string; basePace: number; mistakeChance: number;
+  reaction: number; aggression: number; cornerGrip: number; launchMs: [number, number];
+};
+export const DIFFICULTIES: DiffSpec[] = [
+  { id: "easy",      label: "Easy",      basePace: 0.78, mistakeChance: 0.12,  reaction: 0.55, aggression: 0.25, cornerGrip: 0.85, launchMs: [250, 600] },
+  { id: "medium",    label: "Medium",    basePace: 0.86, mistakeChance: 0.06,  reaction: 0.70, aggression: 0.45, cornerGrip: 0.95, launchMs: [180, 420] },
+  { id: "hard",      label: "Hard",      basePace: 0.93, mistakeChance: 0.03,  reaction: 0.82, aggression: 0.60, cornerGrip: 1.02, launchMs: [120, 300] },
+  { id: "expert",    label: "Expert",    basePace: 0.98, mistakeChance: 0.015, reaction: 0.90, aggression: 0.72, cornerGrip: 1.08, launchMs: [80, 200] },
+  { id: "legendary", label: "Legendary", basePace: 1.02, mistakeChance: 0.005, reaction: 0.97, aggression: 0.85, cornerGrip: 1.14, launchMs: [60, 140] },
+];
+const DIFFICULTY_KEY = "asphalt:difficulty";
+function loadDifficulty(): Difficulty {
+  if (typeof window === "undefined") return "medium";
+  try {
+    const v = (localStorage.getItem(DIFFICULTY_KEY) as Difficulty) ?? "medium";
+    return DIFFICULTIES.some((d) => d.id === v) ? v : "medium";
+  } catch { return "medium"; }
+}
+
+type Personality = "aggressive" | "defensive" | "consistent" | "risktaker" | "wetspecialist" | "qualispecialist";
+const DRIVER_PERSONALITY: Record<string, Personality> = {
+  rosso: "aggressive", silver: "consistent", azure: "qualispecialist",
+  papaya: "risktaker", verde: "wetspecialist", cobalt: "defensive",
+  violet: "aggressive", crimson: "risktaker", ivory: "consistent", onyx: "defensive",
+};
+type PersonalityTraits = {
+  paceJitter: number; overtake: number; defense: number;
+  brakeBias: number; wetMult: number; qualiMult: number; paceMean: number;
+};
+function personalityTraits(p: Personality): PersonalityTraits {
+  switch (p) {
+    case "aggressive":     return { paceJitter: 0.03, overtake: 0.85, defense: 0.55, brakeBias: 0.92, wetMult: 0.97, qualiMult: 1.00, paceMean: 1.02 };
+    case "defensive":      return { paceJitter: 0.02, overtake: 0.45, defense: 0.95, brakeBias: 1.08, wetMult: 1.00, qualiMult: 1.00, paceMean: 0.99 };
+    case "consistent":     return { paceJitter: 0.012,overtake: 0.60, defense: 0.70, brakeBias: 1.00, wetMult: 1.00, qualiMult: 1.00, paceMean: 1.00 };
+    case "risktaker":      return { paceJitter: 0.05, overtake: 0.95, defense: 0.50, brakeBias: 0.88, wetMult: 0.94, qualiMult: 1.00, paceMean: 1.01 };
+    case "wetspecialist":  return { paceJitter: 0.025,overtake: 0.65, defense: 0.70, brakeBias: 1.00, wetMult: 1.08, qualiMult: 1.00, paceMean: 0.99 };
+    case "qualispecialist":return { paceJitter: 0.02, overtake: 0.60, defense: 0.70, brakeBias: 0.96, wetMult: 0.98, qualiMult: 1.04, paceMean: 1.00 };
+  }
+}
 
 // ---------------- Weather ----------------
 export type WeatherId =
@@ -403,6 +447,10 @@ export default function RacingGame() {
   const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
   const [weatherId, setWeatherId] = useState<WeatherId>(() => loadWeather());
   useEffect(() => { try { localStorage.setItem(WEATHER_KEY, weatherId); } catch {} }, [weatherId]);
+  const [difficulty, setDifficulty] = useState<Difficulty>(() => loadDifficulty());
+  useEffect(() => { try { localStorage.setItem(DIFFICULTY_KEY, difficulty); } catch {} }, [difficulty]);
+  const difficultyRef = useRef<Difficulty>(difficulty);
+  useEffect(() => { difficultyRef.current = difficulty; }, [difficulty]);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number; credits: number } | null>(null);
   const [classification, setClassification] = useState<PodiumEntry[]>([]);
@@ -2159,6 +2207,7 @@ export default function RacingGame() {
     player.group.rotation.y = startHeading;
 
     // AI cars (other drivers)
+    type AIMode = "cruise" | "attack" | "defend" | "setup";
     type AI = {
       car: ReturnType<typeof buildCar>;
       t: number;
@@ -2168,9 +2217,24 @@ export default function RacingGame() {
       lastLap: number;
       bestLap: number;
       prevT: number;
+      personality: Personality;
+      traits: PersonalityTraits;
+      paceMult: number;          // baseline target pace as fraction of MAX_SPEED_PREVIEW
+      lateralBias: number;       // resting offset from racing line
+      lateralTarget: number;     // current offset target (race-line vs attack/defend)
+      currentOffset: number;     // smoothed lateral offset
+      mode: AIMode;
+      modeUntil: number;
+      attackSince: number;
+      mistakeUntil: number;      // ms: grip reduced until this
+      gripPenalty: number;       // current mistake-induced grip mult (0..1)
+      launchDelay: number;       // ms after start lights
+      damage: number;            // 0..1
+      lastMistakeAnnounce: number;
     };
     const MAX_SPEED_PREVIEW = 78;
-    const AI_SPEED = MAX_SPEED_PREVIEW * 0.88; // identical pace for fairness
+    const diffSpec = DIFFICULTIES.find((d) => d.id === difficultyRef.current) ?? DIFFICULTIES[1];
+    const AI_SPEED = MAX_SPEED_PREVIEW * diffSpec.basePace; // fallback / lap-time estimator
     const ais: (AI & { driver: Driver; offset: number; firstCross: boolean })[] = [];
     if (!isMulti) {
       // Order AI by qualifying grid (skip player); fall back to default order.
@@ -2187,9 +2251,21 @@ export default function RacingGame() {
         c.group.position.set(g.x, 0, g.z);
         c.group.rotation.y = g.heading;
         const lateral = (slot % 2 === 0 ? 1 : -1) * GRID_LAT;
+        const personality = DRIVER_PERSONALITY[d.id] ?? "consistent";
+        const traits = personalityTraits(personality);
+        const jitter = (Math.random() * 2 - 1) * traits.paceJitter;
+        const isQuali = isQualifying;
+        const paceMult = diffSpec.basePace * traits.paceMean * (1 + jitter) * (isQuali ? traits.qualiMult : 1);
+        // Resting lateral offset: small variation to break the centreline conga line
+        const lateralBias = (Math.random() * 2 - 1) * 1.6;
+        const launchDelay = diffSpec.launchMs[0] + Math.random() * (diffSpec.launchMs[1] - diffSpec.launchMs[0]);
         ais.push({
-          car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral,
+          car: c, t: g.t, speed: 0, driver: d, offset: lateral,
           lap: 1, lapStart: 0, lastLap: 0, bestLap: 0, prevT: g.t, firstCross: false,
+          personality, traits, paceMult,
+          lateralBias, lateralTarget: lateralBias, currentOffset: lateral,
+          mode: "cruise", modeUntil: 0, attackSince: 0,
+          mistakeUntil: 0, gripPenalty: 1, launchDelay, damage: 0, lastMistakeAnnounce: 0,
         });
       });
     }
@@ -2695,8 +2771,9 @@ export default function RacingGame() {
       const turnRate = STEER_RATE * gripNow * speedFactor * steerAuthority * (speed >= 0 ? 1 : -1);
       const dHeading = steering * turnRate * dt;
       heading += dHeading + postImpactSpin * dt;
-      postImpactSpin *= Math.pow(0.05, dt);
-      impactControlLoss *= Math.pow(0.25, dt);
+      // Slower decay → impacts feel weighty, the car actually spins/recovers
+      postImpactSpin *= Math.pow(0.45, dt);
+      impactControlLoss *= Math.pow(0.55, dt);
       const lateralAccel = -dHeading * speed * (0.6 + (1 - gripNow) * 0.45);
       lateralVel += lateralAccel;
       lateralVel *= Math.pow(Math.max(0.04, 0.16 + (1 - gripNow) * 0.55), dt);
@@ -2741,17 +2818,19 @@ export default function RacingGame() {
         // Project back to forward/lateral relative to current heading
         const newForward = ntvx * fxw + ntvz * fzw;
         const newLateral = ntvx * sxw + ntvz * szw;
-        // Head-on impacts bleed extra speed (energy → deformation) — scale with closure speed
-        const headOnBleed = headOn * (0.35 + Math.min(0.45, intoWall / 35));
+        // Head-on impacts bleed a LOT of speed (energy → deformation).
+        // Glancing scrapes lose modest speed and emit a steady spark trail.
+        const headOnBleed = Math.min(0.75, headOn * (0.55 + Math.min(0.55, intoWall / 28)) * 1.1);
         speed = newForward * (1 - headOnBleed);
-        lateralVel = newLateral * 0.6;
+        lateralVel = newLateral * 0.55;
         // Post-impact instability
         const severity = headOn * Math.min(1, intoWall / 25);
         impactControlLoss = Math.min(1, impactControlLoss + severity * 0.85);
         postImpactSpin += (Math.random() - 0.5) * severity * 2.2;
         camTrauma = Math.min(1.5, camTrauma + 0.4 + severity * 0.8);
-        // Sparks (always on contact) — count scales with closure speed
-        const sparkCount = Math.min(10, 2 + Math.floor(intoWall * 0.5));
+        // Sparks (always on contact) — count scales with closure + tangential scrape
+        const tangentialSpeed = Math.sqrt(tvx * tvx + tvz * tvz);
+        const sparkCount = Math.min(12, 2 + Math.floor(intoWall * 0.5) + Math.floor(tangentialSpeed * 0.15));
         for (let s = 0; s < sparkCount; s++) {
           spawnSmoke(carPos.x + (Math.random() - 0.5) * 0.6, carPos.z + (Math.random() - 0.5) * 0.6, {
             color: 0xffb648, life: 0.25 + Math.random() * 0.25, scale: 0.35, opacity: 0.95, y: 0.3,
@@ -2781,10 +2860,17 @@ export default function RacingGame() {
       }
 
       player.group.position.set(carPos.x, pitLiftY, carPos.z);
-      // Flat car orientation (classic feel — no weight transfer)
-      bodyPitch = 0;
-      bodyRoll = 0;
-      player.group.rotation.set(0, heading, 0);
+      // Visual weight transfer — small pitch under braking/accel, roll into corners.
+      // Capped angles so it stays readable on mobile and never disorients.
+      {
+        const sf = Math.min(1, Math.abs(speed) / Math.max(20, MAX_SPEED * 0.4));
+        const targetPitch = (brake ? 0.045 : 0) - (accel ? 0.02 : 0) + (postImpactSpin !== 0 ? 0 : 0);
+        const targetRoll = -steering * sf * 0.08 + lateralVel * 0.0035;
+        bodyPitch += (Math.max(-0.05, Math.min(0.06, targetPitch)) - bodyPitch) * Math.min(1, dt * 8);
+        bodyRoll  += (Math.max(-0.09, Math.min(0.09, targetRoll))  - bodyRoll)  * Math.min(1, dt * 8);
+      }
+      player.group.rotation.order = "YXZ";
+      player.group.rotation.set(bodyPitch, heading, bodyRoll);
 
       const wheelSpin = (speed * dt) / 0.36;
       player.wheels.forEach((w) => (w.rotation.x += wheelSpin));
@@ -2840,52 +2926,186 @@ export default function RacingGame() {
 
       // ---------- AI ----------
       const cLen = curveLength(curve);
-      if (!isMulti) ais.forEach((ai) => {
-        if (ai.lapStart === 0) ai.lapStart = raceStartAt;
-        ai.t += (ai.speed * dt) / cLen;
-        if (ai.t >= 1) ai.t -= 1;
-        // Lap wrap detection (t crosses 1->0)
-        if (ai.prevT > 0.9 && ai.t < 0.1) {
-          if (!ai.firstCross) {
-            // First crossing only arms the AI's lap timer — the partial
-            // grid-to-line distance does NOT count as a flying lap.
-            ai.firstCross = true;
-            ai.lapStart = now;
-          } else {
-            const lt = (now - ai.lapStart) / 1000;
-            ai.lastLap = lt;
-            if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
-            ai.lapStart = now;
-            ai.lap++;
-          }
-        }
-        ai.prevT = ai.t;
-        const ap = curve.getPointAt(ai.t);
-        const atan = curve.getTangentAt(ai.t).normalize();
-        const an = new THREE.Vector3(-atan.z, 0, atan.x);
-        const px = ap.x + an.x * ai.offset;
-        const pz = ap.z + an.z * ai.offset;
-        ai.car.group.position.set(px, 0, pz);
-        ai.car.group.rotation.y = Math.atan2(atan.x, atan.z);
-        ai.car.wheels.forEach((w) => (w.rotation.x += (ai.speed * dt) / 0.36));
+      if (!isMulti) {
+        const wetNow = Math.max(0, Math.min(1, wetness));
+        const playerProg = raceProgress;
+        // helper: curvature around a curve t (uses neighbouring tangents)
+        const corneringAt = (tParam: number) => {
+          const a = ((tParam % 1) + 1) % 1;
+          const b = (a + 0.012) % 1;
+          const ta = curve.getTangentAt(a).normalize();
+          const tb = curve.getTangentAt(b).normalize();
+          const dot = Math.max(-1, Math.min(1, ta.x * tb.x + ta.z * tb.z));
+          return Math.acos(dot); // radians of bend over ~1% of track
+        };
+        ais.forEach((ai) => {
+          if (ai.lapStart === 0) ai.lapStart = raceStartAt;
 
-        // Hitbox vs player car
-        const ddx = carPos.x - px;
-        const ddz = carPos.z - pz;
-        const distSq = ddx * ddx + ddz * ddz;
-        if (distSq < 2.5 * 2.5) {
-          const len = Math.sqrt(distSq) || 1;
-          const nx = ddx / len, nz = ddz / len;
-          const overlap = 2.5 - len;
-          carPos.x += nx * overlap;
-          carPos.z += nz * overlap;
-          speed *= 0.78;
-          lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
-          ai.speed = AI_SPEED * 0.85;
-        } else {
-          ai.speed += (AI_SPEED - ai.speed) * Math.min(1, dt * 0.5);
-        }
-      });
+          // Pre-launch hold: AI is glued to grid until its reaction-delayed launch.
+          if (now < raceStartAt + ai.launchDelay) {
+            ai.speed = 0;
+            return;
+          }
+
+          // ---- Target speed: pace * weather * personality * difficulty grip ceiling
+          const wetMult = ai.traits.wetMult * (1 - wetNow * 0.18);
+          let targetSpeed = MAX_SPEED_PREVIEW * ai.paceMult * wetMult;
+
+          // Corner-speed control: peek ahead, lower target proportional to curvature.
+          const lookAheadT = (ai.t + 0.04) % 1;
+          const bend = corneringAt(lookAheadT); // ~0 straight, up to ~0.25 hard corner
+          const cornerGrip = diffSpec.cornerGrip * ai.gripPenalty;
+          const cornerCeil = MAX_SPEED_PREVIEW * (0.55 + cornerGrip * 0.55) / (1 + bend * (6.0 / Math.max(0.6, ai.traits.brakeBias)));
+          if (cornerCeil < targetSpeed) targetSpeed = cornerCeil;
+
+          // ---- Awareness: closest car ahead + behind in track space
+          let gapAhead = 99, gapBehind = 99;
+          let aheadSideHint = 0; // sign: where the car ahead sits laterally
+          // vs other AI cars
+          for (const other of ais) {
+            if (other === ai) continue;
+            let d = (other.t - ai.t) * cLen;
+            if (d > cLen / 2) d -= cLen;
+            if (d < -cLen / 2) d += cLen;
+            if (d > 0 && d < gapAhead) { gapAhead = d; aheadSideHint = Math.sign(other.currentOffset || 0.001); }
+            if (d < 0 && -d < gapBehind) gapBehind = -d;
+          }
+          // vs player
+          {
+            let pd = (playerProg % 1 - ai.t) * cLen;
+            if (pd > cLen / 2) pd -= cLen;
+            if (pd < -cLen / 2) pd += cLen;
+            // Approx player lateral side relative to centreline
+            const pCt = closestT(carPos);
+            const pCenter = centerline[pCt.idx];
+            const pTan = curve.getTangentAt((pCt.idx / centerline.length)).normalize();
+            const pNx = -pTan.z, pNz = pTan.x;
+            const pSide = (carPos.x - pCenter.x) * pNx + (carPos.z - pCenter.z) * pNz;
+            if (pd > 0 && pd < gapAhead) { gapAhead = pd; aheadSideHint = Math.sign(pSide || 0.001); }
+            if (pd < 0 && -pd < gapBehind) gapBehind = -pd;
+          }
+
+          // ---- Mode selection
+          const attackThresh = 18 - ai.traits.overtake * 6;
+          const defendThresh = 14 - ai.traits.defense * 4;
+          if (gapAhead < attackThresh && gapAhead > 1.8) {
+            if (ai.mode !== "attack" && ai.mode !== "setup") {
+              ai.mode = "attack"; ai.attackSince = now;
+            } else if (ai.mode === "attack" && now - ai.attackSince > 2200) {
+              ai.mode = "setup"; ai.modeUntil = now + 2600;
+            }
+          } else if (gapBehind < defendThresh && gapAhead > 25) {
+            ai.mode = "defend";
+          } else if (ai.mode !== "cruise" && now > ai.modeUntil) {
+            ai.mode = "cruise"; ai.attackSince = 0;
+          }
+
+          // ---- Lateral offset target by mode
+          if (ai.mode === "attack") {
+            // dive to the opposite side of the leading car
+            ai.lateralTarget = aheadSideHint > 0 ? -3.0 : 3.0;
+            targetSpeed *= 1 + diffSpec.aggression * 0.06;
+          } else if (ai.mode === "defend") {
+            // close the inside line; tiny pace bump
+            ai.lateralTarget = ai.lateralBias < 0 ? -2.4 : 2.4;
+            targetSpeed *= 1 + diffSpec.aggression * 0.02;
+          } else if (ai.mode === "setup") {
+            // commit to a switchback line — flipped to bias for two corners
+            ai.lateralTarget = aheadSideHint > 0 ? 2.8 : -2.8;
+          } else {
+            ai.lateralTarget = ai.lateralBias;
+          }
+
+          // ---- Mistake roll (rare on legendary, frequent on easy)
+          if (now > ai.mistakeUntil) {
+            // less likely on long straights, more likely entering corners
+            const cornerWeight = 0.6 + Math.min(1.4, bend * 6);
+            if (Math.random() < diffSpec.mistakeChance * cornerWeight * dt * 6) {
+              ai.mistakeUntil = now + 380 + Math.random() * 380;
+              ai.gripPenalty = 0.55 + Math.random() * 0.15;
+              // tyre smoke puff from rear of car
+              const ap0 = curve.getPointAt(ai.t);
+              spawnSmoke(ap0.x + (Math.random() - 0.5) * 0.8, ap0.z + (Math.random() - 0.5) * 0.8, {
+                color: 0xcccccc, life: 0.7, scale: 1.0, opacity: 0.55, y: 0.35,
+              });
+              // throttled near-player toast
+              const playerCenter = centerline[Math.floor(playerProg % 1 * centerline.length)] ?? centerline[0];
+              const ap = curve.getPointAt(ai.t);
+              const dx = playerCenter.x - ap.x, dz = playerCenter.z - ap.z;
+              if (dx * dx + dz * dz < 60 * 60 && now - ai.lastMistakeAnnounce > 8000) {
+                ai.lastMistakeAnnounce = now;
+                const last = ai.driver.name.split(" ").slice(-1)[0];
+                try { toast(`${last} locks up!`); } catch {}
+              }
+            }
+          } else {
+            // hold reduced grip until window ends
+          }
+          if (now > ai.mistakeUntil) ai.gripPenalty = Math.min(1, ai.gripPenalty + dt * 0.6);
+
+          // ---- Damage softens top speed
+          if (ai.damage > 0.5) targetSpeed *= 1 - Math.min(0.06, (ai.damage - 0.5) * 0.12);
+
+          // ---- Approach target speed (faster accel on higher reaction)
+          const accelRate = 18 * (0.6 + diffSpec.reaction * 0.5);
+          const brakeRate = 38 * (0.7 + diffSpec.reaction * 0.6) * ai.traits.brakeBias;
+          if (ai.speed < targetSpeed) ai.speed = Math.min(targetSpeed, ai.speed + accelRate * dt);
+          else ai.speed = Math.max(targetSpeed, ai.speed - brakeRate * dt);
+
+          // ---- Advance along curve
+          ai.t += (ai.speed * dt) / cLen;
+          if (ai.t >= 1) ai.t -= 1;
+
+          if (ai.prevT > 0.9 && ai.t < 0.1) {
+            if (!ai.firstCross) {
+              ai.firstCross = true;
+              ai.lapStart = now;
+            } else {
+              const lt = (now - ai.lapStart) / 1000;
+              ai.lastLap = lt;
+              if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
+              ai.lapStart = now;
+              ai.lap++;
+            }
+          }
+          ai.prevT = ai.t;
+
+          // ---- Smooth lateral offset toward target (slower if not high reaction)
+          const lateralLerp = Math.min(1, dt * (1.0 + diffSpec.reaction * 1.5));
+          ai.currentOffset += (ai.lateralTarget - ai.currentOffset) * lateralLerp;
+          // small wobble during mistake
+          const wobble = now < ai.mistakeUntil ? Math.sin(now * 0.035) * 0.3 : 0;
+
+          const ap = curve.getPointAt(ai.t);
+          const atan = curve.getTangentAt(ai.t).normalize();
+          const an = new THREE.Vector3(-atan.z, 0, atan.x);
+          const offset = ai.currentOffset + wobble;
+          const px = ap.x + an.x * offset;
+          const pz = ap.z + an.z * offset;
+          ai.car.group.position.set(px, 0, pz);
+          ai.car.group.rotation.y = Math.atan2(atan.x, atan.z);
+          ai.car.wheels.forEach((w) => (w.rotation.x += (ai.speed * dt) / 0.36));
+
+          // ---- Hitbox vs player car
+          const ddx = carPos.x - px;
+          const ddz = carPos.z - pz;
+          const distSq = ddx * ddx + ddz * ddz;
+          if (distSq < 2.5 * 2.5) {
+            const lenC = Math.sqrt(distSq) || 1;
+            const nx = ddx / lenC, nz = ddz / lenC;
+            const overlap = 2.5 - lenC;
+            carPos.x += nx * overlap;
+            carPos.z += nz * overlap;
+            const closure = Math.max(0, (speed - ai.speed) * 0.5);
+            speed *= 0.78;
+            lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
+            ai.speed *= 0.82;
+            ai.damage = Math.min(1, ai.damage + 0.04 + closure * 0.002);
+            camTrauma = Math.min(1.5, camTrauma + 0.15 + closure * 0.01);
+          }
+
+        });
+      }
 
       // ---------- Remote multiplayer cars ----------
       if (isMulti) {
@@ -2985,9 +3205,10 @@ export default function RacingGame() {
         const off = new THREE.Vector3(0, 1.05, -0.4).applyEuler(new THREE.Euler(0, heading, 0));
         camWorld = player.group.position.clone().add(off);
       }
-      // Subtle camera shake from speed only (classic feel)
-      camTrauma = 0;
-      const shake = (Math.abs(speed) / MAX_SPEED) * 0.04;
+      // Camera shake: speed + decaying impact trauma so crashes register on screen.
+      camTrauma = Math.max(0, camTrauma - dt * 1.6);
+      const traumaShake = camTrauma * camTrauma * 0.6;
+      const shake = (Math.abs(speed) / MAX_SPEED) * 0.04 + traumaShake;
       camWorld.x += (Math.random() - 0.5) * shake;
       camWorld.y += (Math.random() - 0.5) * shake * 0.7;
       camWorld.z += (Math.random() - 0.5) * shake * 0.4;
@@ -3555,6 +3776,8 @@ export default function RacingGame() {
           career={career}
           mode={mode}
           lapsChoice={lapsChoice}
+          difficulty={difficulty}
+          onPickDifficulty={setDifficulty}
           allTracks={allTracks}
           customTracks={customTracks}
           onCreate={() => setScreen("editor")}
@@ -3629,6 +3852,11 @@ export default function RacingGame() {
             </div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pos</div>
             <div className={`text-xl font-bold ${sessionMode === "qualifying" ? "text-fuchsia-300" : "text-red-400"}`}>P{hud.position}</div>
+            {mode !== "multi" && (
+              <div className="text-[9px] uppercase tracking-widest text-white/40 mt-1">
+                AI: <span className="text-white/80">{DIFFICULTIES.find((d) => d.id === difficulty)?.label}</span>
+              </div>
+            )}
             {sessionMode === "race" && (() => {
               const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
               const remaining = Math.max(0, required - pitStops);
@@ -4249,11 +4477,13 @@ function Lobby({ roomCode, isHost, players, track, lapsChoice, onPickLaps, onCha
   );
 }
 
-function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTracks, onCreate, onDeleteCustom, onPickLaps, onPick, onBack, onStart }: {
+function TrackSelect({ trackId, career, mode, lapsChoice, difficulty, onPickDifficulty, allTracks, customTracks, onCreate, onDeleteCustom, onPickLaps, onPick, onBack, onStart }: {
   trackId: string;
   career: CareerSave | null;
   mode: Mode;
   lapsChoice: 3 | 5 | 10;
+  difficulty: Difficulty;
+  onPickDifficulty: (d: Difficulty) => void;
   allTracks: TrackDef[];
   customTracks: TrackDef[];
   onCreate: () => void;
@@ -4280,6 +4510,21 @@ function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTrack
                 className={`flex-1 py-2 border-2 font-bold uppercase tracking-widest text-sm ${lapsChoice === n ? "border-red-500 bg-red-500/15 text-white" : "border-white/20 bg-black/40 text-white/70 hover:border-white/40"}`}
               >
                 {n} Laps
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">AI difficulty</div>
+          <div className="grid grid-cols-5 gap-2">
+            {DIFFICULTIES.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => onPickDifficulty(d.id)}
+                className={`py-2 border-2 font-bold uppercase tracking-widest text-[11px] sm:text-xs ${difficulty === d.id ? "border-red-500 bg-red-500/15 text-white" : "border-white/20 bg-black/40 text-white/70 hover:border-white/40"}`}
+              >
+                {d.label}
               </button>
             ))}
           </div>
