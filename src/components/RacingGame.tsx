@@ -2250,9 +2250,21 @@ export default function RacingGame() {
         c.group.position.set(g.x, 0, g.z);
         c.group.rotation.y = g.heading;
         const lateral = (slot % 2 === 0 ? 1 : -1) * GRID_LAT;
+        const personality = DRIVER_PERSONALITY[d.id] ?? "consistent";
+        const traits = personalityTraits(personality);
+        const jitter = (Math.random() * 2 - 1) * traits.paceJitter;
+        const isQuali = isQualifying;
+        const paceMult = diffSpec.basePace * traits.paceMean * (1 + jitter) * (isQuali ? traits.qualiMult : 1);
+        // Resting lateral offset: small variation to break the centreline conga line
+        const lateralBias = (Math.random() * 2 - 1) * 1.6;
+        const launchDelay = diffSpec.launchMs[0] + Math.random() * (diffSpec.launchMs[1] - diffSpec.launchMs[0]);
         ais.push({
-          car: c, t: g.t, speed: AI_SPEED, driver: d, offset: lateral,
+          car: c, t: g.t, speed: 0, driver: d, offset: lateral,
           lap: 1, lapStart: 0, lastLap: 0, bestLap: 0, prevT: g.t, firstCross: false,
+          personality, traits, paceMult,
+          lateralBias, lateralTarget: lateralBias, currentOffset: lateral,
+          mode: "cruise", modeUntil: 0, attackSince: 0,
+          mistakeUntil: 0, gripPenalty: 1, launchDelay, damage: 0, lastMistakeAnnounce: 0,
         });
       });
     }
