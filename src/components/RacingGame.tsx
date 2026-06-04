@@ -2930,12 +2930,9 @@ export default function RacingGame() {
         const wetNow = Math.max(0, Math.min(1, wetness));
         const playerProg = raceProgress;
         // helper: curvature around a curve t (uses neighbouring tangents)
-        const _t1 = new THREE.Vector3();
-        const _t2 = new THREE.Vector3();
         const corneringAt = (tParam: number) => {
           const a = ((tParam % 1) + 1) % 1;
           const b = (a + 0.012) % 1;
-          curve.getTangentAt(a).normalize().toArray(_t1.toArray() as any);
           const ta = curve.getTangentAt(a).normalize();
           const tb = curve.getTangentAt(b).normalize();
           const dot = Math.max(-1, Math.min(1, ta.x * tb.x + ta.z * tb.z));
