@@ -96,6 +96,49 @@ const DRIVERS: Driver[] = [
   { id: "onyx", name: "Sam Carter", team: "Onyx Racing", primary: 0x0f172a, secondary: 0xfbbf24, number: 55 },
 ];
 
+// ---------------- AI difficulty + personalities ----------------
+export type Difficulty = "easy" | "medium" | "hard" | "expert" | "legendary";
+type DiffSpec = {
+  id: Difficulty; label: string; basePace: number; mistakeChance: number;
+  reaction: number; aggression: number; cornerGrip: number; launchMs: [number, number];
+};
+export const DIFFICULTIES: DiffSpec[] = [
+  { id: "easy",      label: "Easy",      basePace: 0.78, mistakeChance: 0.12,  reaction: 0.55, aggression: 0.25, cornerGrip: 0.85, launchMs: [250, 600] },
+  { id: "medium",    label: "Medium",    basePace: 0.86, mistakeChance: 0.06,  reaction: 0.70, aggression: 0.45, cornerGrip: 0.95, launchMs: [180, 420] },
+  { id: "hard",      label: "Hard",      basePace: 0.93, mistakeChance: 0.03,  reaction: 0.82, aggression: 0.60, cornerGrip: 1.02, launchMs: [120, 300] },
+  { id: "expert",    label: "Expert",    basePace: 0.98, mistakeChance: 0.015, reaction: 0.90, aggression: 0.72, cornerGrip: 1.08, launchMs: [80, 200] },
+  { id: "legendary", label: "Legendary", basePace: 1.02, mistakeChance: 0.005, reaction: 0.97, aggression: 0.85, cornerGrip: 1.14, launchMs: [60, 140] },
+];
+const DIFFICULTY_KEY = "asphalt:difficulty";
+function loadDifficulty(): Difficulty {
+  if (typeof window === "undefined") return "medium";
+  try {
+    const v = (localStorage.getItem(DIFFICULTY_KEY) as Difficulty) ?? "medium";
+    return DIFFICULTIES.some((d) => d.id === v) ? v : "medium";
+  } catch { return "medium"; }
+}
+
+type Personality = "aggressive" | "defensive" | "consistent" | "risktaker" | "wetspecialist" | "qualispecialist";
+const DRIVER_PERSONALITY: Record<string, Personality> = {
+  rosso: "aggressive", silver: "consistent", azure: "qualispecialist",
+  papaya: "risktaker", verde: "wetspecialist", cobalt: "defensive",
+  violet: "aggressive", crimson: "risktaker", ivory: "consistent", onyx: "defensive",
+};
+type PersonalityTraits = {
+  paceJitter: number; overtake: number; defense: number;
+  brakeBias: number; wetMult: number; qualiMult: number; paceMean: number;
+};
+function personalityTraits(p: Personality): PersonalityTraits {
+  switch (p) {
+    case "aggressive":     return { paceJitter: 0.03, overtake: 0.85, defense: 0.55, brakeBias: 0.92, wetMult: 0.97, qualiMult: 1.00, paceMean: 1.02 };
+    case "defensive":      return { paceJitter: 0.02, overtake: 0.45, defense: 0.95, brakeBias: 1.08, wetMult: 1.00, qualiMult: 1.00, paceMean: 0.99 };
+    case "consistent":     return { paceJitter: 0.012,overtake: 0.60, defense: 0.70, brakeBias: 1.00, wetMult: 1.00, qualiMult: 1.00, paceMean: 1.00 };
+    case "risktaker":      return { paceJitter: 0.05, overtake: 0.95, defense: 0.50, brakeBias: 0.88, wetMult: 0.94, qualiMult: 1.00, paceMean: 1.01 };
+    case "wetspecialist":  return { paceJitter: 0.025,overtake: 0.65, defense: 0.70, brakeBias: 1.00, wetMult: 1.08, qualiMult: 1.00, paceMean: 0.99 };
+    case "qualispecialist":return { paceJitter: 0.02, overtake: 0.60, defense: 0.70, brakeBias: 0.96, wetMult: 0.98, qualiMult: 1.04, paceMean: 1.00 };
+  }
+}
+
 // ---------------- Weather ----------------
 export type WeatherId =
   | "clear-night"
