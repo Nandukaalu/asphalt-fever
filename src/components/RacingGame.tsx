@@ -4298,11 +4298,13 @@ function Lobby({ roomCode, isHost, players, track, lapsChoice, onPickLaps, onCha
   );
 }
 
-function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTracks, onCreate, onDeleteCustom, onPickLaps, onPick, onBack, onStart }: {
+function TrackSelect({ trackId, career, mode, lapsChoice, difficulty, onPickDifficulty, allTracks, customTracks, onCreate, onDeleteCustom, onPickLaps, onPick, onBack, onStart }: {
   trackId: string;
   career: CareerSave | null;
   mode: Mode;
   lapsChoice: 3 | 5 | 10;
+  difficulty: Difficulty;
+  onPickDifficulty: (d: Difficulty) => void;
   allTracks: TrackDef[];
   customTracks: TrackDef[];
   onCreate: () => void;
@@ -4329,6 +4331,21 @@ function TrackSelect({ trackId, career, mode, lapsChoice, allTracks, customTrack
                 className={`flex-1 py-2 border-2 font-bold uppercase tracking-widest text-sm ${lapsChoice === n ? "border-red-500 bg-red-500/15 text-white" : "border-white/20 bg-black/40 text-white/70 hover:border-white/40"}`}
               >
                 {n} Laps
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <div className="text-[10px] uppercase tracking-widest text-white/50 mb-2">AI difficulty</div>
+          <div className="grid grid-cols-5 gap-2">
+            {DIFFICULTIES.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => onPickDifficulty(d.id)}
+                className={`py-2 border-2 font-bold uppercase tracking-widest text-[11px] sm:text-xs ${difficulty === d.id ? "border-red-500 bg-red-500/15 text-white" : "border-white/20 bg-black/40 text-white/70 hover:border-white/40"}`}
+              >
+                {d.label}
               </button>
             ))}
           </div>
