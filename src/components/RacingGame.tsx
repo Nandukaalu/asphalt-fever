@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Link } from "@tanstack/react-router";
 import { Users } from "lucide-react";
 import PodiumCeremony, { type PodiumEntry } from "./PodiumCeremony";
+import { toast } from "sonner";
 import {
   readNextRoundSetup,
   clearNextRoundSetup,
