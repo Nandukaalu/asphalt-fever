@@ -2915,52 +2915,191 @@ export default function RacingGame() {
 
       // ---------- AI ----------
       const cLen = curveLength(curve);
-      if (!isMulti) ais.forEach((ai) => {
-        if (ai.lapStart === 0) ai.lapStart = raceStartAt;
-        ai.t += (ai.speed * dt) / cLen;
-        if (ai.t >= 1) ai.t -= 1;
-        // Lap wrap detection (t crosses 1->0)
-        if (ai.prevT > 0.9 && ai.t < 0.1) {
-          if (!ai.firstCross) {
-            // First crossing only arms the AI's lap timer — the partial
-            // grid-to-line distance does NOT count as a flying lap.
-            ai.firstCross = true;
-            ai.lapStart = now;
-          } else {
-            const lt = (now - ai.lapStart) / 1000;
-            ai.lastLap = lt;
-            if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
-            ai.lapStart = now;
-            ai.lap++;
-          }
-        }
-        ai.prevT = ai.t;
-        const ap = curve.getPointAt(ai.t);
-        const atan = curve.getTangentAt(ai.t).normalize();
-        const an = new THREE.Vector3(-atan.z, 0, atan.x);
-        const px = ap.x + an.x * ai.offset;
-        const pz = ap.z + an.z * ai.offset;
-        ai.car.group.position.set(px, 0, pz);
-        ai.car.group.rotation.y = Math.atan2(atan.x, atan.z);
-        ai.car.wheels.forEach((w) => (w.rotation.x += (ai.speed * dt) / 0.36));
+      if (!isMulti) {
+        const wetNow = Math.max(0, Math.min(1, wetness));
+        const playerProg = raceProgress;
+        // helper: curvature around a curve t (uses neighbouring tangents)
+        const _t1 = new THREE.Vector3();
+        const _t2 = new THREE.Vector3();
+        const corneringAt = (tParam: number) => {
+          const a = ((tParam % 1) + 1) % 1;
+          const b = (a + 0.012) % 1;
+          curve.getTangentAt(a).normalize().toArray(_t1.toArray() as any);
+          const ta = curve.getTangentAt(a).normalize();
+          const tb = curve.getTangentAt(b).normalize();
+          const dot = Math.max(-1, Math.min(1, ta.x * tb.x + ta.z * tb.z));
+          return Math.acos(dot); // radians of bend over ~1% of track
+        };
+        ais.forEach((ai) => {
+          if (ai.lapStart === 0) ai.lapStart = raceStartAt;
 
-        // Hitbox vs player car
-        const ddx = carPos.x - px;
-        const ddz = carPos.z - pz;
-        const distSq = ddx * ddx + ddz * ddz;
-        if (distSq < 2.5 * 2.5) {
-          const len = Math.sqrt(distSq) || 1;
-          const nx = ddx / len, nz = ddz / len;
-          const overlap = 2.5 - len;
-          carPos.x += nx * overlap;
-          carPos.z += nz * overlap;
-          speed *= 0.78;
-          lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
-          ai.speed = AI_SPEED * 0.85;
-        } else {
-          ai.speed += (AI_SPEED - ai.speed) * Math.min(1, dt * 0.5);
-        }
-      });
+          // Pre-launch hold: AI is glued to grid until its reaction-delayed launch.
+          if (now < raceStartAt + ai.launchDelay) {
+            ai.speed = 0;
+            return;
+          }
+
+          // ---- Target speed: pace * weather * personality * difficulty grip ceiling
+          const wetMult = ai.traits.wetMult * (1 - wetNow * 0.18);
+          let targetSpeed = MAX_SPEED_PREVIEW * ai.paceMult * wetMult;
+
+          // Corner-speed control: peek ahead, lower target proportional to curvature.
+          const lookAheadT = (ai.t + 0.04) % 1;
+          const bend = corneringAt(lookAheadT); // ~0 straight, up to ~0.25 hard corner
+          const cornerGrip = diffSpec.cornerGrip * ai.gripPenalty;
+          const cornerCeil = MAX_SPEED_PREVIEW * (0.55 + cornerGrip * 0.55) / (1 + bend * (6.0 / Math.max(0.6, ai.traits.brakeBias)));
+          if (cornerCeil < targetSpeed) targetSpeed = cornerCeil;
+
+          // ---- Awareness: closest car ahead + behind in track space
+          let gapAhead = 99, gapBehind = 99;
+          let aheadSideHint = 0; // sign: where the car ahead sits laterally
+          // vs other AI cars
+          for (const other of ais) {
+            if (other === ai) continue;
+            let d = (other.t - ai.t) * cLen;
+            if (d > cLen / 2) d -= cLen;
+            if (d < -cLen / 2) d += cLen;
+            if (d > 0 && d < gapAhead) { gapAhead = d; aheadSideHint = Math.sign(other.currentOffset || 0.001); }
+            if (d < 0 && -d < gapBehind) gapBehind = -d;
+          }
+          // vs player
+          {
+            let pd = (playerProg % 1 - ai.t) * cLen;
+            if (pd > cLen / 2) pd -= cLen;
+            if (pd < -cLen / 2) pd += cLen;
+            // Approx player lateral side relative to centreline
+            const pCt = closestT(carPos);
+            const pCenter = centerline[pCt.idx];
+            const pTan = curve.getTangentAt((pCt.idx / centerline.length)).normalize();
+            const pNx = -pTan.z, pNz = pTan.x;
+            const pSide = (carPos.x - pCenter.x) * pNx + (carPos.z - pCenter.z) * pNz;
+            if (pd > 0 && pd < gapAhead) { gapAhead = pd; aheadSideHint = Math.sign(pSide || 0.001); }
+            if (pd < 0 && -pd < gapBehind) gapBehind = -pd;
+          }
+
+          // ---- Mode selection
+          const attackThresh = 18 - ai.traits.overtake * 6;
+          const defendThresh = 14 - ai.traits.defense * 4;
+          const prevMode = ai.mode;
+          if (gapAhead < attackThresh && gapAhead > 1.8) {
+            if (ai.mode !== "attack" && ai.mode !== "setup") {
+              ai.mode = "attack"; ai.attackSince = now;
+            } else if (ai.mode === "attack" && now - ai.attackSince > 2200) {
+              ai.mode = "setup"; ai.modeUntil = now + 2600;
+            }
+          } else if (gapBehind < defendThresh && gapAhead > 25) {
+            ai.mode = "defend";
+          } else if (ai.mode !== "cruise" && now > ai.modeUntil) {
+            ai.mode = "cruise"; ai.attackSince = 0;
+          }
+
+          // ---- Lateral offset target by mode
+          if (ai.mode === "attack") {
+            // dive to the opposite side of the leading car
+            ai.lateralTarget = aheadSideHint > 0 ? -3.0 : 3.0;
+            targetSpeed *= 1 + diffSpec.aggression * 0.06;
+          } else if (ai.mode === "defend") {
+            // close the inside line; tiny pace bump
+            ai.lateralTarget = ai.lateralBias < 0 ? -2.4 : 2.4;
+            targetSpeed *= 1 + diffSpec.aggression * 0.02;
+          } else if (ai.mode === "setup") {
+            // commit to a switchback line — flipped to bias for two corners
+            ai.lateralTarget = aheadSideHint > 0 ? 2.8 : -2.8;
+          } else {
+            ai.lateralTarget = ai.lateralBias;
+          }
+
+          // ---- Mistake roll (rare on legendary, frequent on easy)
+          if (now > ai.mistakeUntil) {
+            // less likely on long straights, more likely entering corners
+            const cornerWeight = 0.6 + Math.min(1.4, bend * 6);
+            if (Math.random() < diffSpec.mistakeChance * cornerWeight * dt * 6) {
+              ai.mistakeUntil = now + 380 + Math.random() * 380;
+              ai.gripPenalty = 0.55 + Math.random() * 0.15;
+              // tyre smoke puff from rear of car
+              const ap0 = curve.getPointAt(ai.t);
+              spawnSmoke(ap0.x + (Math.random() - 0.5) * 0.8, ap0.z + (Math.random() - 0.5) * 0.8, {
+                color: 0xcccccc, life: 0.7, scale: 1.0, opacity: 0.55, y: 0.35,
+              });
+              // throttled near-player toast
+              const playerCenter = centerline[Math.floor(playerProg % 1 * centerline.length)] ?? centerline[0];
+              const ap = curve.getPointAt(ai.t);
+              const dx = playerCenter.x - ap.x, dz = playerCenter.z - ap.z;
+              if (dx * dx + dz * dz < 60 * 60 && now - ai.lastMistakeAnnounce > 8000) {
+                ai.lastMistakeAnnounce = now;
+                const last = ai.driver.name.split(" ").slice(-1)[0];
+                try { toast(`${last} locks up!`); } catch {}
+              }
+            }
+          } else {
+            // hold reduced grip until window ends
+          }
+          if (now > ai.mistakeUntil) ai.gripPenalty = Math.min(1, ai.gripPenalty + dt * 0.6);
+
+          // ---- Damage softens top speed
+          if (ai.damage > 0.5) targetSpeed *= 1 - Math.min(0.06, (ai.damage - 0.5) * 0.12);
+
+          // ---- Approach target speed (faster accel on higher reaction)
+          const accelRate = 18 * (0.6 + diffSpec.reaction * 0.5);
+          const brakeRate = 38 * (0.7 + diffSpec.reaction * 0.6) * ai.traits.brakeBias;
+          if (ai.speed < targetSpeed) ai.speed = Math.min(targetSpeed, ai.speed + accelRate * dt);
+          else ai.speed = Math.max(targetSpeed, ai.speed - brakeRate * dt);
+
+          // ---- Advance along curve
+          ai.t += (ai.speed * dt) / cLen;
+          if (ai.t >= 1) ai.t -= 1;
+
+          if (ai.prevT > 0.9 && ai.t < 0.1) {
+            if (!ai.firstCross) {
+              ai.firstCross = true;
+              ai.lapStart = now;
+            } else {
+              const lt = (now - ai.lapStart) / 1000;
+              ai.lastLap = lt;
+              if (ai.bestLap === 0 || lt < ai.bestLap) ai.bestLap = lt;
+              ai.lapStart = now;
+              ai.lap++;
+            }
+          }
+          ai.prevT = ai.t;
+
+          // ---- Smooth lateral offset toward target (slower if not high reaction)
+          const lateralLerp = Math.min(1, dt * (1.0 + diffSpec.reaction * 1.5));
+          ai.currentOffset += (ai.lateralTarget - ai.currentOffset) * lateralLerp;
+          // small wobble during mistake
+          const wobble = now < ai.mistakeUntil ? Math.sin(now * 0.035) * 0.3 : 0;
+
+          const ap = curve.getPointAt(ai.t);
+          const atan = curve.getTangentAt(ai.t).normalize();
+          const an = new THREE.Vector3(-atan.z, 0, atan.x);
+          const offset = ai.currentOffset + wobble;
+          const px = ap.x + an.x * offset;
+          const pz = ap.z + an.z * offset;
+          ai.car.group.position.set(px, 0, pz);
+          ai.car.group.rotation.y = Math.atan2(atan.x, atan.z);
+          ai.car.wheels.forEach((w) => (w.rotation.x += (ai.speed * dt) / 0.36));
+
+          // ---- Hitbox vs player car
+          const ddx = carPos.x - px;
+          const ddz = carPos.z - pz;
+          const distSq = ddx * ddx + ddz * ddz;
+          if (distSq < 2.5 * 2.5) {
+            const lenC = Math.sqrt(distSq) || 1;
+            const nx = ddx / lenC, nz = ddz / lenC;
+            const overlap = 2.5 - lenC;
+            carPos.x += nx * overlap;
+            carPos.z += nz * overlap;
+            const closure = Math.max(0, (speed - ai.speed) * 0.5);
+            speed *= 0.78;
+            lateralVel += (nx * Math.cos(heading) - nz * Math.sin(heading)) * 1.5;
+            ai.speed *= 0.82;
+            ai.damage = Math.min(1, ai.damage + 0.04 + closure * 0.002);
+            camTrauma = Math.min(1.5, camTrauma + 0.15 + closure * 0.01);
+          }
+
+          void prevMode;
+        });
+      }
 
       // ---------- Remote multiplayer cars ----------
       if (isMulti) {
