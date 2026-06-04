@@ -3857,6 +3857,11 @@ export default function RacingGame() {
             </div>
             <div className="text-[10px] uppercase tracking-widest text-white/50 mt-1">Pos</div>
             <div className={`text-xl font-bold ${sessionMode === "qualifying" ? "text-fuchsia-300" : "text-red-400"}`}>P{hud.position}</div>
+            {mode !== "multi" && (
+              <div className="text-[9px] uppercase tracking-widest text-white/40 mt-1">
+                AI: <span className="text-white/80">{DIFFICULTIES.find((d) => d.id === difficulty)?.label}</span>
+              </div>
+            )}
             {sessionMode === "race" && (() => {
               const required = lapsChoice === 10 ? 2 : lapsChoice === 5 ? 1 : 0;
               const remaining = Math.max(0, required - pitStops);
