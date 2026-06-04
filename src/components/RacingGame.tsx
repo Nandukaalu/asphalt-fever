@@ -2988,7 +2988,6 @@ export default function RacingGame() {
           // ---- Mode selection
           const attackThresh = 18 - ai.traits.overtake * 6;
           const defendThresh = 14 - ai.traits.defense * 4;
-          const prevMode = ai.mode;
           if (gapAhead < attackThresh && gapAhead > 1.8) {
             if (ai.mode !== "attack" && ai.mode !== "setup") {
               ai.mode = "attack"; ai.attackSince = now;
@@ -3105,7 +3104,6 @@ export default function RacingGame() {
             camTrauma = Math.min(1.5, camTrauma + 0.15 + closure * 0.01);
           }
 
-          void prevMode;
         });
       }
 
