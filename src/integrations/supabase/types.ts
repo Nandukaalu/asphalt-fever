@@ -207,7 +207,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      server_announcements_public: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          message: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          message?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          message?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       is_lobby_member: {
