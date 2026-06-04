@@ -446,6 +446,10 @@ export default function RacingGame() {
   const [lapsChoice, setLapsChoice] = useState<3 | 5 | 10>(5);
   const [weatherId, setWeatherId] = useState<WeatherId>(() => loadWeather());
   useEffect(() => { try { localStorage.setItem(WEATHER_KEY, weatherId); } catch {} }, [weatherId]);
+  const [difficulty, setDifficulty] = useState<Difficulty>(() => loadDifficulty());
+  useEffect(() => { try { localStorage.setItem(DIFFICULTY_KEY, difficulty); } catch {} }, [difficulty]);
+  const difficultyRef = useRef<Difficulty>(difficulty);
+  useEffect(() => { difficultyRef.current = difficulty; }, [difficulty]);
   const [career, setCareer] = useState<CareerSave | null>(null);
   const [result, setResult] = useState<{ position: number; bestLap: number; points: number; credits: number } | null>(null);
   const [classification, setClassification] = useState<PodiumEntry[]>([]);
