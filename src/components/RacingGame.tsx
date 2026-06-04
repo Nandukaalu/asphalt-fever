@@ -2860,10 +2860,17 @@ export default function RacingGame() {
       }
 
       player.group.position.set(carPos.x, pitLiftY, carPos.z);
-      // Flat car orientation (classic feel — no weight transfer)
-      bodyPitch = 0;
-      bodyRoll = 0;
-      player.group.rotation.set(0, heading, 0);
+      // Visual weight transfer — small pitch under braking/accel, roll into corners.
+      // Capped angles so it stays readable on mobile and never disorients.
+      {
+        const sf = Math.min(1, Math.abs(speed) / Math.max(20, MAX_SPEED * 0.4));
+        const targetPitch = (brake ? 0.045 : 0) - (accel ? 0.02 : 0) + (postImpactSpin !== 0 ? 0 : 0);
+        const targetRoll = -steering * sf * 0.08 + lateralVel * 0.0035;
+        bodyPitch += (Math.max(-0.05, Math.min(0.06, targetPitch)) - bodyPitch) * Math.min(1, dt * 8);
+        bodyRoll  += (Math.max(-0.09, Math.min(0.09, targetRoll))  - bodyRoll)  * Math.min(1, dt * 8);
+      }
+      player.group.rotation.order = "YXZ";
+      player.group.rotation.set(bodyPitch, heading, bodyRoll);
 
       const wheelSpin = (speed * dt) / 0.36;
       player.wheels.forEach((w) => (w.rotation.x += wheelSpin));
