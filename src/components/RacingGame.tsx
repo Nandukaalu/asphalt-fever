@@ -104,11 +104,11 @@ type DiffSpec = {
   reaction: number; aggression: number; cornerGrip: number; launchMs: [number, number];
 };
 export const DIFFICULTIES: DiffSpec[] = [
-  { id: "easy",      label: "Easy",      basePace: 0.78, mistakeChance: 0.12,  reaction: 0.55, aggression: 0.25, cornerGrip: 0.85, launchMs: [250, 600] },
-  { id: "medium",    label: "Medium",    basePace: 0.86, mistakeChance: 0.06,  reaction: 0.70, aggression: 0.45, cornerGrip: 0.95, launchMs: [180, 420] },
-  { id: "hard",      label: "Hard",      basePace: 0.93, mistakeChance: 0.03,  reaction: 0.82, aggression: 0.60, cornerGrip: 1.02, launchMs: [120, 300] },
-  { id: "expert",    label: "Expert",    basePace: 0.98, mistakeChance: 0.015, reaction: 0.90, aggression: 0.72, cornerGrip: 1.08, launchMs: [80, 200] },
-  { id: "legendary", label: "Legendary", basePace: 1.02, mistakeChance: 0.005, reaction: 0.97, aggression: 0.85, cornerGrip: 1.14, launchMs: [60, 140] },
+  { id: "easy",      label: "Easy",      basePace: 0.78, mistakeChance: 0.020, reaction: 0.55, aggression: 0.25, cornerGrip: 0.85, launchMs: [250, 600] },
+  { id: "medium",    label: "Medium",    basePace: 0.86, mistakeChance: 0.010, reaction: 0.70, aggression: 0.45, cornerGrip: 0.95, launchMs: [180, 420] },
+  { id: "hard",      label: "Hard",      basePace: 0.93, mistakeChance: 0.005, reaction: 0.82, aggression: 0.60, cornerGrip: 1.02, launchMs: [120, 300] },
+  { id: "expert",    label: "Expert",    basePace: 0.98, mistakeChance: 0.002, reaction: 0.90, aggression: 0.72, cornerGrip: 1.08, launchMs: [80, 200] },
+  { id: "legendary", label: "Legendary", basePace: 1.02, mistakeChance: 0.0008,reaction: 0.97, aggression: 0.85, cornerGrip: 1.14, launchMs: [60, 140] },
 ];
 const DIFFICULTY_KEY = "asphalt:difficulty";
 function loadDifficulty(): Difficulty {
