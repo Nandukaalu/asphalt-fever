@@ -104,11 +104,11 @@ type DiffSpec = {
   reaction: number; aggression: number; cornerGrip: number; launchMs: [number, number];
 };
 export const DIFFICULTIES: DiffSpec[] = [
-  { id: "easy",      label: "Easy",      basePace: 0.78, mistakeChance: 0.12,  reaction: 0.55, aggression: 0.25, cornerGrip: 0.85, launchMs: [250, 600] },
-  { id: "medium",    label: "Medium",    basePace: 0.86, mistakeChance: 0.06,  reaction: 0.70, aggression: 0.45, cornerGrip: 0.95, launchMs: [180, 420] },
-  { id: "hard",      label: "Hard",      basePace: 0.93, mistakeChance: 0.03,  reaction: 0.82, aggression: 0.60, cornerGrip: 1.02, launchMs: [120, 300] },
-  { id: "expert",    label: "Expert",    basePace: 0.98, mistakeChance: 0.015, reaction: 0.90, aggression: 0.72, cornerGrip: 1.08, launchMs: [80, 200] },
-  { id: "legendary", label: "Legendary", basePace: 1.02, mistakeChance: 0.005, reaction: 0.97, aggression: 0.85, cornerGrip: 1.14, launchMs: [60, 140] },
+  { id: "easy",      label: "Easy",      basePace: 0.78, mistakeChance: 0.020, reaction: 0.55, aggression: 0.25, cornerGrip: 0.85, launchMs: [250, 600] },
+  { id: "medium",    label: "Medium",    basePace: 0.86, mistakeChance: 0.010, reaction: 0.70, aggression: 0.45, cornerGrip: 0.95, launchMs: [180, 420] },
+  { id: "hard",      label: "Hard",      basePace: 0.93, mistakeChance: 0.005, reaction: 0.82, aggression: 0.60, cornerGrip: 1.02, launchMs: [120, 300] },
+  { id: "expert",    label: "Expert",    basePace: 0.98, mistakeChance: 0.002, reaction: 0.90, aggression: 0.72, cornerGrip: 1.08, launchMs: [80, 200] },
+  { id: "legendary", label: "Legendary", basePace: 1.02, mistakeChance: 0.0008,reaction: 0.97, aggression: 0.85, cornerGrip: 1.14, launchMs: [60, 140] },
 ];
 const DIFFICULTY_KEY = "asphalt:difficulty";
 function loadDifficulty(): Difficulty {
@@ -3016,32 +3016,28 @@ export default function RacingGame() {
             ai.lateralTarget = ai.lateralBias;
           }
 
-          // ---- Mistake roll (rare on legendary, frequent on easy)
+          // ---- Mistake roll: only in genuine high-risk situations.
+          // Gated on aggressive attack/defend OR wet conditions; pure base
+          // chance is tiny so dry, clean laps almost never produce lockups.
           if (now > ai.mistakeUntil) {
-            // less likely on long straights, more likely entering corners
-            const cornerWeight = 0.6 + Math.min(1.4, bend * 6);
-            if (Math.random() < diffSpec.mistakeChance * cornerWeight * dt * 6) {
-              ai.mistakeUntil = now + 380 + Math.random() * 380;
-              ai.gripPenalty = 0.55 + Math.random() * 0.15;
-              // tyre smoke puff from rear of car
+            const inBattle = ai.mode === "attack" || ai.mode === "defend";
+            const wetFactor = wetNow > 0.15 ? 1 + wetNow * 1.5 : 0;
+            const battleFactor = inBattle ? 1 : 0;
+            // base "genuine mistake" chance is ~10% of nominal, only at corner entry
+            const cornerWeight = Math.max(0, bend * 6 - 0.4);
+            const situational = battleFactor + wetFactor + 0.1;
+            const p = diffSpec.mistakeChance * cornerWeight * situational * dt;
+            if (p > 0 && Math.random() < p) {
+              ai.mistakeUntil = now + 260 + Math.random() * 260;
+              ai.gripPenalty = 0.75 + Math.random() * 0.1;
+              // visual feedback only — tyre smoke puff, no toast/message
               const ap0 = curve.getPointAt(ai.t);
               spawnSmoke(ap0.x + (Math.random() - 0.5) * 0.8, ap0.z + (Math.random() - 0.5) * 0.8, {
-                color: 0xcccccc, life: 0.7, scale: 1.0, opacity: 0.55, y: 0.35,
+                color: 0xcccccc, life: 0.6, scale: 0.9, opacity: 0.5, y: 0.35,
               });
-              // throttled near-player toast
-              const playerCenter = centerline[Math.floor(playerProg % 1 * centerline.length)] ?? centerline[0];
-              const ap = curve.getPointAt(ai.t);
-              const dx = playerCenter.x - ap.x, dz = playerCenter.z - ap.z;
-              if (dx * dx + dz * dz < 60 * 60 && now - ai.lastMistakeAnnounce > 8000) {
-                ai.lastMistakeAnnounce = now;
-                const last = ai.driver.name.split(" ").slice(-1)[0];
-                try { toast(`${last} locks up!`); } catch {}
-              }
             }
-          } else {
-            // hold reduced grip until window ends
           }
-          if (now > ai.mistakeUntil) ai.gripPenalty = Math.min(1, ai.gripPenalty + dt * 0.6);
+          if (now > ai.mistakeUntil) ai.gripPenalty = Math.min(1, ai.gripPenalty + dt * 0.8);
 
           // ---- Damage softens top speed
           if (ai.damage > 0.5) targetSpeed *= 1 - Math.min(0.06, (ai.damage - 0.5) * 0.12);
